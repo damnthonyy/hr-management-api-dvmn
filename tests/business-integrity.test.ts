@@ -38,6 +38,17 @@ const usedDays = async () =>
     (await prisma.leaveBalance.findFirstOrThrow({ where: { employeeId, leaveTypeId, year } })).usedDays
   );
 
+async function createPeriod(label: string) {
+  const res = await request(app).post("/api/v1/payroll/periods").set(auth()).send({
+    label: `${label} ${unique}`,
+    periodStart: "2027-01-01T00:00:00.000Z",
+    periodEnd: "2027-01-31T00:00:00.000Z",
+    payDate: "2027-02-01T00:00:00.000Z",
+  });
+  expect(res.status).toBe(201);
+  return res.body.data.id as string;
+}
+
 describe("business integrity", () => {
   beforeAll(async () => {
     const res = await request(app).post("/api/v1/auth/register").send({
@@ -118,6 +129,62 @@ describe("business integrity", () => {
       const before = await usedDays();
       expect((await request(app).post(`/api/v1/leave/requests/${leave.id}/cancel`).set(auth())).status).toBe(200);
       expect(await usedDays()).toBe(before);
+    });
+  });
+
+  describe("payroll", () => {
+    it("enforces the period lifecycle", async () => {
+      const periodId = await createPeriod("Lifecycle");
+      const step = (action: string) => request(app).post(`/api/v1/payroll/periods/${periodId}/${action}`).set(auth()).send({});
+
+      expect((await step("pay")).status).toBe(409);
+      expect((await step("approve")).status).toBe(409);
+      expect((await step("generate")).body.data.generated).toBe(1);
+      expect((await step("generate")).body.data.generated).toBe(0);
+      expect((await step("submit")).status).toBe(200);
+      expect((await step("submit")).status).toBe(409);
+      expect((await step("generate")).status).toBe(409);
+      expect((await step("approve")).status).toBe(200);
+      expect((await step("approve")).status).toBe(409);
+      expect((await step("pay")).status).toBe(200);
+      expect((await step("submit")).status).toBe(409);
+
+      const period = await prisma.payrollPeriod.findUniqueOrThrow({ where: { id: periodId }, include: { records: true } });
+      expect(period.status).toBe("PAID");
+      expect(period.records.every((record) => record.status === "PAID")).toBe(true);
+    });
+
+    it("keeps totals right under concurrent adjustments, and freezes them after submission", async () => {
+      const periodId = await createPeriod("Adjustments");
+      await request(app).post(`/api/v1/payroll/periods/${periodId}/generate`).set(auth()).send({});
+      const record = await prisma.payrollRecord.findFirstOrThrow({ where: { periodId } });
+      const gross = Number(record.grossSalary);
+
+      await Promise.all([
+        ...Array.from({ length: 10 }, () =>
+          request(app).post(`/api/v1/payroll/records/${record.id}/bonuses`).set(auth()).send({ label: "Bonus", amount: 100 })
+        ),
+        ...Array.from({ length: 5 }, () =>
+          request(app).post(`/api/v1/payroll/records/${record.id}/deductions`).set(auth()).send({ label: "Tax", amount: 40 })
+        ),
+      ]);
+      const updated = await prisma.payrollRecord.findUniqueOrThrow({ where: { id: record.id } });
+      expect(Number(updated.bonusTotal)).toBe(1000);
+      expect(Number(updated.deductionTotal)).toBe(200);
+      expect(Number(updated.netSalary)).toBeCloseTo(gross + 800, 2);
+
+      const negative = await request(app)
+        .post(`/api/v1/payroll/records/${record.id}/bonuses`)
+        .set(auth())
+        .send({ label: "Negative", amount: -500 });
+      expect(negative.status).toBe(400);
+
+      await request(app).post(`/api/v1/payroll/periods/${periodId}/submit`).set(auth()).send({});
+      const late = await request(app)
+        .post(`/api/v1/payroll/records/${record.id}/bonuses`)
+        .set(auth())
+        .send({ label: "Late", amount: 1 });
+      expect(late.status).toBe(409);
     });
   });
 });

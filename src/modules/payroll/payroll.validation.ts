@@ -14,7 +14,7 @@ export const generateRecordsSchema = z.object({
 
 export const adjustmentSchema = z.object({
   label: z.string().min(1).max(120),
-  amount: z.number(),
+  amount: z.number().positive().max(10_000_000),
 });
 
 export const recalcSchema = z.object({
