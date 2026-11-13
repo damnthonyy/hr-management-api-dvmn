@@ -95,6 +95,31 @@ describe("multi-tenant isolation", () => {
     });
     victim.leaveRequestId = leaveRequest.id;
 
+    const period = await prisma.payrollPeriod.create({
+      data: {
+        organizationId: b.orgId,
+        label: "Victim period",
+        periodStart: new Date(),
+        periodEnd: new Date(),
+        payDate: new Date(),
+        status: "DRAFT",
+      },
+    });
+    victim.periodId = period.id;
+    const record = await prisma.payrollRecord.create({
+      data: {
+        periodId: period.id,
+        employeeId: employee.id,
+        grossSalary: 10000,
+        bonusTotal: 0,
+        deductionTotal: 0,
+        netSalary: 10000,
+        currency: "USD",
+        status: "DRAFT",
+      },
+    });
+    victim.payrollRecordId = record.id;
+
     ensureStorage();
     const fileName = `victim-${unique}.txt`;
     fs.writeFileSync(path.join(uploadsDir(), fileName), "confidential payslip");
@@ -280,6 +305,37 @@ describe("multi-tenant isolation", () => {
       expect(leave?.status).toBe("PENDING");
       expect(await prisma.leaveBalance.count({ where: { employeeId: victim.employeeId } })).toBe(0);
       expect(await prisma.leaveRequest.count({ where: { employeeId: victim.employeeId } })).toBe(1);
+    });
+  });
+
+  describe("payroll", () => {
+    it.each([
+      ["POST", () => `/api/v1/payroll/periods/${victim.periodId}/generate`, {}],
+      ["GET", () => `/api/v1/payroll/periods/${victim.periodId}/records`, undefined],
+      ["GET", () => `/api/v1/payroll/periods/${victim.periodId}/report`, undefined],
+      ["POST", () => `/api/v1/payroll/periods/${victim.periodId}/submit`, {}],
+      ["POST", () => `/api/v1/payroll/periods/${victim.periodId}/approve`, {}],
+      ["POST", () => `/api/v1/payroll/periods/${victim.periodId}/pay`, {}],
+      ["GET", () => `/api/v1/payroll/records/${victim.payrollRecordId}`, undefined],
+      ["POST", () => `/api/v1/payroll/records/${victim.payrollRecordId}/bonuses`, { label: "x", amount: 1000000 }],
+      ["POST", () => `/api/v1/payroll/records/${victim.payrollRecordId}/deductions`, { label: "x", amount: 1000000 }],
+    ] as const)("%s %s returns 404", async (method, url, body) => {
+      const req = request(app)[method.toLowerCase() as "get" | "post"](url()).set(asA());
+      const res = await (body ? req.send(body) : req);
+      expect(res.status).toBe(404);
+      expect(res.text).not.toContain("10000");
+    });
+
+    it("left the victim payroll untouched", async () => {
+      const period = await prisma.payrollPeriod.findUnique({ where: { id: victim.periodId } });
+      expect(period?.status).toBe("DRAFT");
+      const record = await prisma.payrollRecord.findUnique({
+        where: { id: victim.payrollRecordId },
+        include: { bonuses: true, deductions: true },
+      });
+      expect(record?.bonuses).toHaveLength(0);
+      expect(record?.deductions).toHaveLength(0);
+      expect(record?.netSalary.toString()).toBe("10000");
     });
   });
 });

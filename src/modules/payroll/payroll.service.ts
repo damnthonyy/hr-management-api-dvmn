@@ -9,6 +9,18 @@ function toNumber(value: Prisma.Decimal | number): number {
   return typeof value === "number" ? value : Number(value.toString());
 }
 
+async function findPeriodInOrg(organizationId: string, id: string) {
+  const period = await prisma.payrollPeriod.findUnique({ where: { id, organizationId } });
+  if (!period) throw ApiError.notFound("Payroll period not found");
+  return period;
+}
+
+/** Payroll records have no organizationId column: scope through their period. */
+async function assertRecordInOrg(organizationId: string, id: string): Promise<void> {
+  const count = await prisma.payrollRecord.count({ where: { id, period: { organizationId } } });
+  if (count === 0) throw ApiError.notFound("Payroll record not found");
+}
+
 export async function listPeriods(organizationId: string, query: Record<string, unknown>) {
   const params = parsePagination(query);
   const [items, total] = await Promise.all([
@@ -50,9 +62,13 @@ export async function createPeriod(organizationId: string, data: {
   return period;
 }
 
-export async function generateRecords(periodId: string, employeeIds: string[] | undefined, actorId: string) {
-  const period = await prisma.payrollPeriod.findUnique({ where: { id: periodId } });
-  if (!period) throw ApiError.notFound("Payroll period not found");
+export async function generateRecords(
+  organizationId: string,
+  periodId: string,
+  employeeIds: string[] | undefined,
+  actorId: string
+) {
+  const period = await findPeriodInOrg(organizationId, periodId);
 
   const employees = await prisma.employee.findMany({
     where: {
@@ -96,7 +112,8 @@ export async function generateRecords(periodId: string, employeeIds: string[] | 
   return { generated: created.length };
 }
 
-export async function listRecords(periodId: string, query: Record<string, unknown>) {
+export async function listRecords(organizationId: string, periodId: string, query: Record<string, unknown>) {
+  await findPeriodInOrg(organizationId, periodId);
   const params = parsePagination(query);
   const [items, total] = await Promise.all([
     prisma.payrollRecord.findMany({
@@ -114,9 +131,9 @@ export async function listRecords(periodId: string, query: Record<string, unknow
   return { items, meta: buildMeta(params, total) };
 }
 
-export async function getRecord(id: string) {
+export async function getRecord(organizationId: string, id: string) {
   const record = await prisma.payrollRecord.findUnique({
-    where: { id },
+    where: { id, period: { organizationId } },
     include: { employee: true, bonuses: true, deductions: true, period: true },
   });
   if (!record) throw ApiError.notFound("Payroll record not found");
@@ -138,7 +155,8 @@ async function recomputeRecord(recordId: string) {
   });
 }
 
-export async function addBonus(recordId: string, data: { label: string; amount: number }) {
+export async function addBonus(organizationId: string, recordId: string, data: { label: string; amount: number }) {
+  await assertRecordInOrg(organizationId, recordId);
   const bonus = await prisma.bonus.create({
     data: { payrollRecordId: recordId, label: data.label, amount: data.amount },
   });
@@ -146,7 +164,8 @@ export async function addBonus(recordId: string, data: { label: string; amount: 
   return bonus;
 }
 
-export async function addDeduction(recordId: string, data: { label: string; amount: number }) {
+export async function addDeduction(organizationId: string, recordId: string, data: { label: string; amount: number }) {
+  await assertRecordInOrg(organizationId, recordId);
   const deduction = await prisma.deduction.create({
     data: { payrollRecordId: recordId, label: data.label, amount: data.amount },
   });
@@ -154,9 +173,10 @@ export async function addDeduction(recordId: string, data: { label: string; amou
   return deduction;
 }
 
-export async function submitForApproval(periodId: string, actorId: string) {
+export async function submitForApproval(organizationId: string, periodId: string, actorId: string) {
+  await findPeriodInOrg(organizationId, periodId);
   const period = await prisma.payrollPeriod.update({
-    where: { id: periodId },
+    where: { id: periodId, organizationId },
     data: { status: "PENDING_APPROVAL" },
   });
   await prisma.payrollRecord.updateMany({
@@ -173,12 +193,11 @@ export async function submitForApproval(periodId: string, actorId: string) {
   return period;
 }
 
-export async function approvePeriod(periodId: string, actorId: string) {
-  const period = await prisma.payrollPeriod.findUnique({ where: { id: periodId } });
-  if (!period) throw ApiError.notFound("Payroll period not found");
+export async function approvePeriod(organizationId: string, periodId: string, actorId: string) {
+  const period = await findPeriodInOrg(organizationId, periodId);
 
   const updated = await prisma.payrollPeriod.update({
-    where: { id: periodId },
+    where: { id: periodId, organizationId },
     data: { status: "APPROVED", approvedById: actorId, approvedAt: new Date() },
   });
   await prisma.payrollRecord.updateMany({
@@ -202,9 +221,10 @@ export async function approvePeriod(periodId: string, actorId: string) {
   return updated;
 }
 
-export async function markPaid(periodId: string, actorId: string) {
+export async function markPaid(organizationId: string, periodId: string, actorId: string) {
+  await findPeriodInOrg(organizationId, periodId);
   const period = await prisma.payrollPeriod.update({
-    where: { id: periodId },
+    where: { id: periodId, organizationId },
     data: { status: "PAID" },
   });
   await prisma.payrollRecord.updateMany({ where: { periodId }, data: { status: "PAID" } });
@@ -219,6 +239,7 @@ export async function markPaid(periodId: string, actorId: string) {
 }
 
 export async function payrollReport(organizationId: string, periodId: string) {
+  await findPeriodInOrg(organizationId, periodId);
   const records = await prisma.payrollRecord.findMany({
     where: { periodId, period: { organizationId } },
     include: { employee: { select: { firstName: true, lastName: true, departmentId: true } } },
