@@ -85,6 +85,27 @@ export async function revokeSessions(where: Prisma.SessionWhereInput): Promise<v
   ]);
 }
 
+/** Issues a new verification token (stored hashed) and emails the link. */
+async function sendEmailVerification(user: Pick<User, "id" | "email" | "firstName">): Promise<void> {
+  const verificationToken = randomToken(24);
+  await prisma.emailVerificationToken.create({
+    data: {
+      userId: user.id,
+      tokenHash: sha256(verificationToken),
+      expiresAt: new Date(Date.now() + env.emailVerificationTtl * 1000),
+    },
+  });
+  await enqueueEmail({
+    to: user.email,
+    subject: "Verify your email",
+    template: "email_verification",
+    context: {
+      firstName: user.firstName,
+      verifyUrl: `${env.appPublicUrl}/api/v1/auth/verify-email?token=${verificationToken}`,
+    },
+  });
+}
+
 export async function register(input: {
   organizationName: string;
   email: string;
@@ -124,24 +145,7 @@ export async function register(input: {
     return { organization, user };
   });
 
-  const verificationToken = randomToken(24);
-  await prisma.emailVerificationToken.create({
-    data: {
-      userId: result.user.id,
-      tokenHash: sha256(verificationToken),
-      expiresAt: new Date(Date.now() + env.emailVerificationTtl * 1000),
-    },
-  });
-
-  await enqueueEmail({
-    to: result.user.email,
-    subject: "Verify your email",
-    template: "email_verification",
-    context: {
-      firstName: result.user.firstName,
-      verifyUrl: `${env.appPublicUrl}/api/v1/auth/verify-email?token=${verificationToken}`,
-    },
-  });
+  await sendEmailVerification(result.user);
 
   await recordAudit({
     organizationId: result.organization.id,
@@ -440,11 +444,46 @@ export async function getProfile(userId: string) {
 
 export async function updateProfile(
   userId: string,
-  data: Partial<Pick<User, "firstName" | "lastName" | "email">>
+  data: Partial<Pick<User, "firstName" | "lastName" | "email">> & { currentPassword?: string }
 ) {
-  const user = await prisma.user.update({
-    where: { id: userId },
-    data,
+  const { currentPassword, ...changes } = data;
+  const current = await prisma.user.findUnique({ where: { id: userId } });
+  if (!current) throw ApiError.notFound("User not found");
+
+  const emailChanged = changes.email !== undefined && changes.email !== current.email;
+  if (!emailChanged) {
+    delete changes.email;
+    const user = await prisma.user.update({ where: { id: userId }, data: changes });
+    return sanitizeUser(user);
+  }
+
+  // The email is the login and password-reset channel: changing it with a
+  // stolen session alone would allow a full account takeover.
+  if (!currentPassword || !(await verifyPassword(current.passwordHash, currentPassword))) {
+    throw ApiError.badRequest("Current password is required to change the email address");
+  }
+
+  const user = await prisma.$transaction(async (tx) => {
+    // Pending reset / verification links point to the old address.
+    await tx.passwordResetToken.updateMany({ where: { userId, usedAt: null }, data: { usedAt: new Date() } });
+    await tx.emailVerificationToken.updateMany({ where: { userId, usedAt: null }, data: { usedAt: new Date() } });
+    return tx.user.update({ where: { id: userId }, data: { ...changes, emailVerified: false } });
+  });
+
+  await sendEmailVerification(user);
+  await enqueueEmail({
+    to: current.email,
+    subject: "Your email address was changed",
+    template: "email_changed",
+    context: { firstName: current.firstName, newEmail: user.email },
+  });
+  await recordAudit({
+    organizationId: user.organizationId,
+    userId,
+    action: "user.email_changed",
+    entityType: "User",
+    entityId: userId,
+    metadata: { from: current.email, to: user.email },
   });
   return sanitizeUser(user);
 }

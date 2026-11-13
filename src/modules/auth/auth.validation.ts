@@ -44,6 +44,8 @@ export const updateProfileSchema = z.object({
   firstName: z.string().min(1).max(80).optional(),
   lastName: z.string().min(1).max(80).optional(),
   email: accountEmail().optional(),
+  /** Required when `email` changes. */
+  currentPassword: z.string().min(1).max(128).optional(),
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;

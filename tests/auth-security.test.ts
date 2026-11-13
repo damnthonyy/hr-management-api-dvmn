@@ -346,4 +346,49 @@ describe("auth security", () => {
       expect(mod.env.isProduction).toBe(true);
     });
   });
+
+  describe("email change", () => {
+    it("requires the current password", async () => {
+      const account = await register("email-nopwd");
+      const res = await request(app)
+        .patch("/api/v1/auth/me")
+        .set(bearer(account.accessToken))
+        .send({ email: `hijacked-${unique}@test.example` });
+      expect(res.status).toBe(400);
+      const wrong = await request(app)
+        .patch("/api/v1/auth/me")
+        .set(bearer(account.accessToken))
+        .send({ email: `hijacked-${unique}@test.example`, currentPassword: "nope" });
+      expect(wrong.status).toBe(400);
+      expect((await prisma.user.findUnique({ where: { id: account.userId } }))?.email).toBe(account.email);
+    });
+
+    it("resets verification and invalidates pending links", async () => {
+      const account = await register("email-change");
+      await prisma.user.update({ where: { id: account.userId }, data: { emailVerified: true } });
+      const raw = randomToken(24);
+      await prisma.passwordResetToken.create({
+        data: { userId: account.userId, tokenHash: sha256(raw), expiresAt: new Date(Date.now() + 60_000) },
+      });
+
+      const newEmail = `moved-${unique}@test.example`;
+      const res = await request(app)
+        .patch("/api/v1/auth/me")
+        .set(bearer(account.accessToken))
+        .send({ email: newEmail, currentPassword: password });
+      expect(res.status).toBe(200);
+      expect(res.body.data.email).toBe(newEmail);
+      expect(res.body.data.emailVerified).toBe(false);
+      const reset = await request(app).post("/api/v1/auth/reset-password").send({ token: raw, password: "Whatever123!" });
+      expect(reset.status).toBe(400);
+      expect(await prisma.emailVerificationToken.count({ where: { userId: account.userId, usedAt: null } })).toBe(1);
+    });
+
+    it("still allows name changes without a password", async () => {
+      const account = await register("email-name");
+      const res = await request(app).patch("/api/v1/auth/me").set(bearer(account.accessToken)).send({ firstName: "Renamed" });
+      expect(res.status).toBe(200);
+      expect(res.body.data.firstName).toBe("Renamed");
+    });
+  });
 });
