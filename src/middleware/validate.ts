@@ -29,6 +29,17 @@ export function validate(schema: ZodType, source: "body" | "params" = "body") {
 }
 
 /**
+ * Parses req.body with a schema and returns the typed result (400 on invalid
+ * input). Validation happens in the controller so the inferred type flows to
+ * the service: req.body itself is typed any by Express.
+ */
+export function parseBody<S extends ZodType>(req: Request, schema: S): z.output<S> {
+  const result = schema.safeParse(req.body);
+  if (!result.success) throw validationError(result.error);
+  return result.data;
+}
+
+/**
  * Parses req.query with a schema and returns the typed result. Used in
  * controllers rather than as a middleware so the type flows to the service
  * (req.query itself stays typed as ParsedQs). Throws a 400 on invalid input.

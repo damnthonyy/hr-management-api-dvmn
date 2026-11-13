@@ -80,6 +80,15 @@ describe("document security", () => {
       expect(uploadsCount()).toBe(before);
     });
 
+    it("validates the multipart fields and removes the file when they are invalid", async () => {
+      const before = uploadsCount();
+      const res = await upload()
+        .field("employeeId", "not-a-uuid")
+        .attach("file", PDF, { filename: "a.pdf", contentType: "application/pdf" });
+      expect(res.status).toBe(400);
+      expect(uploadsCount()).toBe(before);
+    });
+
     it("answers 400 (not 500) to malformed multipart requests", async () => {
       const res = await upload()
         .attach("file", PDF, { filename: "a.pdf", contentType: "application/pdf" })

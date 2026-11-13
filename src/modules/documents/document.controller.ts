@@ -1,9 +1,10 @@
 import { Request, Response } from "express";
 import * as service from "./document.service";
-import { parseQuery } from "../../middleware/validate";
-import { listDocumentsQuery } from "./document.validation";
+import { parseBody, parseQuery } from "../../middleware/validate";
+import { createCategorySchema, importFromUrlSchema, listDocumentsQuery, uploadDocumentSchema } from "./document.validation";
 import { sendSuccess, sendCreated, sendNoContent, sendPaginated } from "../../utils/response";
 import { ApiError } from "../../utils/apiError";
+import { removeFile } from "../../lib/storage";
 import { requireAuthContext, requireOrgId } from "../../utils/tenant";
 
 export async function list(req: Request, res: Response): Promise<void> {
@@ -18,17 +19,25 @@ export async function getOne(req: Request, res: Response): Promise<void> {
 export async function uploadDocument(req: Request, res: Response): Promise<void> {
   const auth = requireAuthContext(req);
   if (!req.file) throw ApiError.badRequest("No file provided");
+  let fields;
+  try {
+    fields = parseBody(req, uploadDocumentSchema);
+  } catch (error) {
+    // multer already wrote the file: do not leave it behind.
+    await removeFile(req.file.path);
+    throw error;
+  }
   const document = await service.saveUploadedDocument(auth.organizationId, req.file, {
-    employeeId: req.body?.employeeId,
-    categoryId: req.body?.categoryId,
+    ...fields,
     uploadedById: auth.userId,
   });
   sendCreated(res, document);
 }
 
 export async function importFromUrl(req: Request, res: Response): Promise<void> {
+  const body = parseBody(req, importFromUrlSchema);
   const auth = requireAuthContext(req);
-  const document = await service.importFromUrl(auth.organizationId, req.body, auth.userId);
+  const document = await service.importFromUrl(auth.organizationId, body, auth.userId);
   sendCreated(res, document);
 }
 
@@ -51,5 +60,6 @@ export async function listCategories(req: Request, res: Response): Promise<void>
 }
 
 export async function createCategory(req: Request, res: Response): Promise<void> {
-  sendCreated(res, await service.createCategory(requireOrgId(req), req.body.name));
+  const body = parseBody(req, createCategorySchema);
+  sendCreated(res, await service.createCategory(requireOrgId(req), body.name));
 }

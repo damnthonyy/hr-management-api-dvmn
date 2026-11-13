@@ -23,3 +23,9 @@ export const listDocumentsQuery = z.object({
   categoryId: uuidFilter,
 });
 export type ListDocumentsQuery = z.infer<typeof listDocumentsQuery>;
+
+/** Text fields of the multipart upload (all optional). */
+export const uploadDocumentSchema = z.object({
+  employeeId: z.uuid().optional(),
+  categoryId: z.uuid().optional(),
+});

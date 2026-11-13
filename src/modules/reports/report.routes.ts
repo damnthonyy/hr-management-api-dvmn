@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { validate, validateIdParams } from "../../middleware/validate";
+import { parseBody, validateIdParams } from "../../middleware/validate";
 import { Router, Request, Response } from "express";
 import * as service from "./report.service";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -48,9 +48,9 @@ const exportSchema = z.object({
   params: z.record(z.string(), z.unknown()).default({}),
 });
 
-router.post("/export", validate(exportSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post("/export", asyncHandler(async (req: Request, res: Response) => {
   if (!req.auth) throw ApiError.unauthorized();
-  const body = req.body as z.infer<typeof exportSchema>;
+  const body = parseBody(req, exportSchema);
   const includeSalary = req.auth.permissions.includes(PERMISSIONS.SALARY_VIEW);
   if (body.reportType === "salary-summary" && !includeSalary) {
     throw ApiError.forbidden("The salary report requires the salary:view permission");

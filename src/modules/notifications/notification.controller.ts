@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import * as service from "./notification.service";
-import { parseQuery } from "../../middleware/validate";
-import { listNotificationsQuery } from "./notification.validation";
+import { parseBody, parseQuery } from "../../middleware/validate";
+import { inviteSchema, listNotificationsQuery } from "./notification.validation";
 import { sendSuccess, sendPaginated } from "../../utils/response";
 import { ApiError } from "../../utils/apiError";
 import { canGrantSystemRole } from "../../config/permissions";
@@ -28,9 +28,10 @@ export async function markAllRead(req: Request, res: Response): Promise<void> {
 }
 
 export async function invite(req: Request, res: Response): Promise<void> {
+  const body = parseBody(req, inviteSchema);
   if (!req.auth) throw ApiError.unauthorized();
-  if (!canGrantSystemRole(req.auth, req.body.role)) {
+  if (!canGrantSystemRole(req.auth, body.role)) {
     throw ApiError.forbidden("You cannot invite users with this role");
   }
-  sendSuccess(res, await service.invite(req.auth.organizationId, req.body, req.auth.userId));
+  sendSuccess(res, await service.invite(req.auth.organizationId, body, req.auth.userId));
 }
