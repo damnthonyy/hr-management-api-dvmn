@@ -39,6 +39,36 @@ if (accessSecret === refreshSecret) {
   throw new Error("JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different");
 }
 
+/**
+ * TRUST_PROXY: number of reverse proxies in front of the app (e.g. 1), or a
+ * comma-separated list of trusted proxy addresses/subnets. Unset means the
+ * app is reached directly and X-Forwarded-* headers are ignored. "true" is
+ * refused: it trusts any client-supplied X-Forwarded-For, which lets anyone
+ * pick their own IP (rate limits, audit logs).
+ */
+function trustProxy(): false | number | string[] {
+  const raw = process.env.TRUST_PROXY?.trim();
+  if (!raw || raw === "false" || raw === "0") return false;
+  if (raw === "true") {
+    throw new Error("TRUST_PROXY=true trusts spoofable headers; set the number of proxies (e.g. 1) or their addresses");
+  }
+  if (/^\d+$/.test(raw)) return Number.parseInt(raw, 10);
+  return raw.split(",").map((entry) => entry.trim()).filter(Boolean);
+}
+
+/**
+ * CORS_ORIGIN: comma-separated list of allowed origins, or "*". Unset means
+ * "*" in development and no cross-origin access in production. The API
+ * authenticates with bearer tokens, never cookies, so credentials are never
+ * allowed cross-origin.
+ */
+function corsOrigins(): "*" | string[] {
+  const raw = process.env.CORS_ORIGIN?.trim();
+  if (!raw) return isProduction ? [] : "*";
+  if (raw === "*") return "*";
+  return raw.split(",").map((entry) => entry.trim().replace(/\/$/, "")).filter(Boolean);
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   isProduction,
@@ -59,7 +89,8 @@ export const env = {
     window: asInt("RATE_LIMIT_WINDOW", 60),
     max: asInt("RATE_LIMIT_MAX", 300),
   },
-  corsOrigin: process.env.CORS_ORIGIN ?? "*",
+  trustProxy: trustProxy(),
+  corsOrigins: corsOrigins(),
   smtpFrom: process.env.SMTP_FROM ?? "no-reply@hrvantage.example",
   appPublicUrl: process.env.APP_PUBLIC_URL ?? "http://localhost:4000",
 };

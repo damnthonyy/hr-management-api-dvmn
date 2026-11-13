@@ -15,13 +15,14 @@ export function createApp(): Application {
   const app = express();
 
   app.disable("x-powered-by");
-  app.set("trust proxy", true);
+  app.set("trust proxy", env.trustProxy);
 
   app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
   app.use(
     cors({
-      origin: env.corsOrigin === "*" ? true : env.corsOrigin.split(","),
-      credentials: true,
+      origin: env.corsOrigins === "*" ? "*" : env.corsOrigins,
+      credentials: false,
+      exposedHeaders: ["X-Request-Id", "X-RateLimit-Limit", "X-RateLimit-Remaining", "Retry-After"],
     })
   );
   app.use(express.json({ limit: "5mb" }));
