@@ -22,7 +22,7 @@ router.get("/", requirePermission(PERMISSIONS.DOCUMENT_VIEW), asyncHandler(contr
 router.post("/upload", requirePermission(PERMISSIONS.DOCUMENT_MANAGE), upload.single("file"), asyncHandler(controller.uploadDocument));
 router.post("/import-from-url", requirePermission(PERMISSIONS.DOCUMENT_MANAGE), validate(importFromUrlSchema), asyncHandler(controller.importFromUrl));
 router.get("/:id", requirePermission(PERMISSIONS.DOCUMENT_VIEW), asyncHandler(controller.getOne));
-router.get("/:id/download", asyncHandler(controller.download));
+router.get("/:id/download", requirePermission(PERMISSIONS.DOCUMENT_VIEW), asyncHandler(controller.download));
 router.delete("/:id", requirePermission(PERMISSIONS.DOCUMENT_MANAGE), asyncHandler(controller.remove));
 
 export default router;

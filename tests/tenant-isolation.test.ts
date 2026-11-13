@@ -4,6 +4,9 @@ import { createApp } from "../src/app";
 import { prisma } from "../src/lib/prisma";
 import { closeRedis } from "../src/lib/redis";
 import { closeQueues } from "../src/queues";
+import fs from "fs";
+import path from "path";
+import { uploadsDir, ensureStorage } from "../src/lib/storage";
 
 /**
  * Two organizations, A (attacker) and B (victim). Every request below is
@@ -69,9 +72,29 @@ describe("multi-tenant isolation", () => {
       data: { organizationId: b.orgId, name: "Victim Dept", code: `VD${unique}`.slice(0, 20) },
     });
     victim.departmentId = department.id;
+
+    ensureStorage();
+    const fileName = `victim-${unique}.txt`;
+    fs.writeFileSync(path.join(uploadsDir(), fileName), "confidential payslip");
+    const document = await prisma.document.create({
+      data: {
+        organizationId: b.orgId,
+        employeeId: employee.id,
+        uploadedById: b.userId,
+        fileName,
+        originalName: "payslip.txt",
+        mimeType: "text/plain",
+        sizeBytes: 20,
+        storagePath: path.join("uploads", fileName),
+        source: "upload",
+      },
+    });
+    victim.documentId = document.id;
+    victim.documentFile = path.join(uploadsDir(), fileName);
   });
 
   afterAll(async () => {
+    if (victim.documentFile) fs.rmSync(victim.documentFile, { force: true });
     await prisma.organization.deleteMany({ where: { id: { in: [a?.orgId, b?.orgId].filter(Boolean) } } });
     await closeQueues().catch(() => undefined);
     await prisma.$disconnect();
@@ -146,6 +169,33 @@ describe("multi-tenant isolation", () => {
       expect(employee?.jobTitle).toBe("Engineer");
       expect(employee?.status).toBe("ACTIVE");
       expect(employee?.baseSalary.toString()).toBe("123456");
+    });
+  });
+
+  describe("documents", () => {
+    it.each([
+      ["GET", ""],
+      ["GET", "/download"],
+      ["DELETE", ""],
+    ])("%s /documents/:id%s returns 404", async (method, suffix) => {
+      const url = `/api/v1/documents/${victim.documentId}${suffix}`;
+      const res = await request(app)[method.toLowerCase() as "get" | "delete"](url).set(asA());
+      expect(res.status).toBe(404);
+      expect(res.text).not.toContain("confidential");
+    });
+
+    it("rejects uploads attached to another org's employee", async () => {
+      const res = await request(app)
+        .post("/api/v1/documents/upload")
+        .set(asA())
+        .field("employeeId", victim.employeeId)
+        .attach("file", Buffer.from("%PDF-1.4 test"), { filename: "x.pdf", contentType: "application/pdf" });
+      expect(res.status).toBe(404);
+    });
+
+    it("left the victim document and file untouched", async () => {
+      expect(await prisma.document.findUnique({ where: { id: victim.documentId } })).not.toBeNull();
+      expect(fs.existsSync(victim.documentFile)).toBe(true);
     });
   });
 });
