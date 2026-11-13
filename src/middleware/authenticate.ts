@@ -7,7 +7,8 @@ import { permissionsForRole } from "../config/permissions";
 /** Avoid a write per request: refresh lastSeenAt at most every 5 minutes. */
 const SESSION_TOUCH_INTERVAL_MS = 5 * 60 * 1000;
 
-export async function authenticate(req: Request, _res: Response, next: NextFunction): Promise<void> {
+/** Resolves the request's auth context, or throws an ApiError (401). */
+async function resolveAuth(req: Request): Promise<NonNullable<Request["auth"]>> {
   try {
     const header = req.header("authorization");
     if (!header || !header.toLowerCase().startsWith("bearer ")) {
@@ -47,7 +48,7 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       assignment.role.permissions.map((rp) => rp.permission.key)
     );
 
-    req.auth = {
+    return {
       userId: user.id,
       organizationId: user.organizationId,
       email: user.email,
@@ -55,21 +56,36 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       sessionId: payload.sessionId,
       permissions: Array.from(new Set([...rolePermissions, ...customPermissions])),
     };
-    next();
   } catch (error) {
-    if (error instanceof ApiError) {
-      next(error);
-      return;
-    }
-    next(ApiError.unauthorized("Invalid or expired token"));
+    if (error instanceof ApiError) throw error;
+    throw ApiError.unauthorized("Invalid or expired token");
   }
 }
 
-export function optionalAuthenticate(req: Request, _res: Response, next: NextFunction): void {
-  const header = req.header("authorization");
-  if (!header) {
-    next();
+export async function authenticate(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  let auth: NonNullable<Request["auth"]>;
+  try {
+    auth = await resolveAuth(req);
+  } catch (error) {
+    next(error);
     return;
   }
-  authenticate(req, _res, next).catch(() => next());
+  req.auth = auth;
+  next();
+}
+
+/**
+ * Sets req.auth when a valid token is provided, otherwise continues
+ * anonymously. It used to delegate to authenticate, which answers 401 on an
+ * invalid token instead of continuing.
+ */
+export async function optionalAuthenticate(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  if (req.header("authorization")) {
+    try {
+      req.auth = await resolveAuth(req);
+    } catch {
+      req.auth = undefined;
+    }
+  }
+  next();
 }
