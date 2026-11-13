@@ -1,9 +1,9 @@
 import { z } from "zod";
 
 export const importFromUrlSchema = z.object({
-  url: z.string().url(),
-  employeeId: z.string().uuid().optional(),
-  categoryId: z.string().uuid().optional(),
+  url: z.url(),
+  employeeId: z.uuid().optional(),
+  categoryId: z.uuid().optional(),
   fileName: z.string().max(200).optional(),
 });
 
@@ -12,6 +12,6 @@ export const createCategorySchema = z.object({
 });
 
 export const attachMetadataSchema = z.object({
-  employeeId: z.string().uuid().optional(),
-  categoryId: z.string().uuid().optional(),
+  employeeId: z.uuid().optional(),
+  categoryId: z.uuid().optional(),
 });

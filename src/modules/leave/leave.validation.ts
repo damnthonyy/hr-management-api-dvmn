@@ -9,10 +9,10 @@ export const createLeaveTypeSchema = z.object({
 });
 
 export const createLeaveRequestSchema = z.object({
-  employeeId: z.string().uuid(),
-  leaveTypeId: z.string().uuid(),
-  startDate: z.string().datetime(),
-  endDate: z.string().datetime(),
+  employeeId: z.uuid(),
+  leaveTypeId: z.uuid(),
+  startDate: z.iso.datetime(),
+  endDate: z.iso.datetime(),
   reason: z.string().max(400).optional(),
 });
 
@@ -21,8 +21,8 @@ export const decisionSchema = z.object({
 });
 
 export const setBalanceSchema = z.object({
-  employeeId: z.string().uuid(),
-  leaveTypeId: z.string().uuid(),
+  employeeId: z.uuid(),
+  leaveTypeId: z.uuid(),
   year: z.number().int(),
   entitledDays: z.number().nonnegative(),
 });

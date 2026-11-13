@@ -2,13 +2,13 @@ import { z } from "zod";
 
 export const createPeriodSchema = z.object({
   label: z.string().min(1).max(80),
-  periodStart: z.string().datetime(),
-  periodEnd: z.string().datetime(),
-  payDate: z.string().datetime(),
+  periodStart: z.iso.datetime(),
+  periodEnd: z.iso.datetime(),
+  payDate: z.iso.datetime(),
 });
 
 export const generateRecordsSchema = z.object({
-  employeeIds: z.array(z.string().uuid()).optional(),
+  employeeIds: z.array(z.uuid()).optional(),
 });
 
 export const adjustmentSchema = z.object({

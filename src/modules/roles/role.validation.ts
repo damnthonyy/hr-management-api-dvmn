@@ -13,9 +13,9 @@ export const updateRoleSchema = z.object({
 });
 
 export const assignRoleSchema = z.object({
-  userId: z.string().uuid(),
-  roleId: z.string().uuid(),
-  departmentId: z.string().uuid().optional(),
+  userId: z.uuid(),
+  roleId: z.uuid(),
+  departmentId: z.uuid().optional(),
 });
 
 export const setSystemRoleSchema = z.object({

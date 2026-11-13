@@ -8,7 +8,7 @@ import { requirePermission } from "../../middleware/authorize";
 import { PERMISSIONS } from "../../config/permissions";
 
 const inviteSchema = z.object({
-  email: z.string().email(),
+  email: z.email(),
   role: z.string().min(1),
 });
 

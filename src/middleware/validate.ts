@@ -1,10 +1,10 @@
 import { NextFunction, Request, Response } from "express";
-import { ZodSchema, ZodError } from "zod";
+import { ZodError, type ZodType } from "zod";
 import { ApiError } from "../utils/apiError";
 
 type Source = "body" | "query" | "params";
 
-export function validate(schema: ZodSchema, source: Source = "body") {
+export function validate(schema: ZodType, source: Source = "body") {
   return (req: Request, _res: Response, next: NextFunction): void => {
     try {
       const parsed = schema.parse(req[source]);
