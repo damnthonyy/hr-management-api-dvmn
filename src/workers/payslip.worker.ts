@@ -29,7 +29,7 @@ export function createPayslipWorker(): Worker {
         `Deductions: ${record.deductionTotal.toString()}`,
         `Net: ${record.netSalary.toString()} ${record.currency}`,
       ].join("\n");
-      fs.writeFileSync(filePath, content);
+      await fs.promises.writeFile(filePath, content);
 
       await prisma.payrollRecord.update({
         where: { id: record.id },

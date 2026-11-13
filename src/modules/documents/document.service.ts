@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
-import { uploadsDir, resolveStoragePath, sanitizeFileName } from "../../lib/storage";
+import { fileExists, removeFile, resolveStoragePath, sanitizeFileName, sha256File, uploadsDir } from "../../lib/storage";
 import { randomToken } from "../../utils/tokens";
 import { recordAudit } from "../../services/audit.service";
 import { enqueueDocumentProcessing } from "../../queues";
@@ -60,11 +60,11 @@ export async function saveUploadedDocument(organizationId: string, file: Uploade
     }
     await assertOrgRefs(organizationId, { employee: meta.employeeId, documentCategory: meta.categoryId });
   } catch (error) {
-    fs.rmSync(file.path, { force: true });
+    await removeFile(file.path);
     throw error;
   }
   const relative = path.join("uploads", file.filename);
-  const checksum = await fileChecksum(file.path);
+  const checksum = await sha256File(file.path);
   const document = await prisma.document.create({
     data: {
       organizationId,
@@ -165,7 +165,7 @@ export async function readDocumentFile(
 ): Promise<{ absolutePath: string; document: Awaited<ReturnType<typeof getDocument>> }> {
   const document = await getDocument(organizationId, id);
   const absolutePath = resolveStoragePath(document.storagePath);
-  if (!fs.existsSync(absolutePath)) {
+  if (!(await fileExists(absolutePath))) {
     throw ApiError.notFound("File is no longer available on disk");
   }
   return { absolutePath, document };
@@ -174,12 +174,14 @@ export async function readDocumentFile(
 export async function deleteDocument(organizationId: string, id: string, actorId: string) {
   const document = await getDocument(organizationId, id);
   const absolutePath = resolveStoragePath(document.storagePath);
+  // Row first, then file: if the delete fails, the document stays usable
+  // instead of pointing to a file that is already gone.
+  await prisma.document.delete({ where: { id, organizationId } });
   try {
-    if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath);
+    await removeFile(absolutePath);
   } catch (error) {
     logger.warn({ err: error, id }, "failed to remove file from disk");
   }
-  await prisma.document.delete({ where: { id, organizationId } });
   await recordAudit({
     organizationId: document.organizationId,
     userId: actorId,
@@ -209,7 +211,3 @@ async function readHead(filePath: string): Promise<Buffer> {
   }
 }
 
-async function fileChecksum(filePath: string): Promise<string> {
-  const buffer = fs.readFileSync(filePath);
-  return crypto.createHash("sha256").update(buffer).digest("hex");
-}
