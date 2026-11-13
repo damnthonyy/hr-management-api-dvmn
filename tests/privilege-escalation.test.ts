@@ -246,4 +246,19 @@ describe("privilege escalation", () => {
       expect(await prisma.user.count({ where: { email: `sneaky-${unique}@test.example` } })).toBe(0);
     });
   });
+
+  describe("invitations", () => {
+    it.each([
+      ["an org admin", () => admin.token, "SUPER_ADMIN", 403],
+      ["a delegated user manager", () => users.usermgr.token, "ORGANIZATION_ADMIN", 403],
+      ["anyone", () => admin.token, "GOD_MODE", 400],
+      ["an org admin", () => admin.token, "HR_MANAGER", 200],
+    ] as const)("%s inviting a %s gets %i", async (_who, token, role, status) => {
+      const res = await request(app)
+        .post("/api/v1/notifications/invite")
+        .set(bearer(token()))
+        .send({ email: `invitee-${role}-${unique}@test.example`, role });
+      expect(res.status).toBe(status);
+    });
+  });
 });

@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import * as service from "./notification.service";
 import { sendSuccess, sendPaginated } from "../../utils/response";
 import { ApiError } from "../../utils/apiError";
+import { canGrantSystemRole } from "../../config/permissions";
 
 export async function list(req: Request, res: Response): Promise<void> {
   if (!req.auth) throw ApiError.unauthorized();
@@ -26,5 +27,8 @@ export async function markAllRead(req: Request, res: Response): Promise<void> {
 
 export async function invite(req: Request, res: Response): Promise<void> {
   if (!req.auth) throw ApiError.unauthorized();
+  if (!canGrantSystemRole(req.auth, req.body.role)) {
+    throw ApiError.forbidden("You cannot invite users with this role");
+  }
   sendSuccess(res, await service.invite(req.auth.organizationId, req.body, req.auth.userId));
 }

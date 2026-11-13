@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { SystemRole } from "@prisma/client";
 import * as controller from "./notification.controller";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { validate } from "../../middleware/validate";
@@ -9,7 +10,7 @@ import { PERMISSIONS } from "../../config/permissions";
 
 const inviteSchema = z.object({
   email: z.email(),
-  role: z.string().min(1),
+  role: z.enum(SystemRole),
 });
 
 const router = Router();
