@@ -90,4 +90,43 @@ describe("HTTP hardening", () => {
       expect(list.env.corsOrigins).toEqual(["https://app.example", "https://admin.example"]);
     });
   });
+
+  describe("error responses", () => {
+    const leaks = (body: unknown) => {
+      const text = JSON.stringify(body);
+      expect(text).not.toMatch(/stack|prisma|invocation|\.ts:|node_modules|Unique constraint|organizationId_code/i);
+    };
+
+    it("answers 400 to a malformed JSON body, without stack trace", async () => {
+      const res = await request(app)
+        .post("/api/v1/auth/login")
+        .set("Content-Type", "application/json")
+        .send('{"email": ');
+      expect(res.status).toBe(400);
+      expect(res.body.error.message).toBe("Malformed request body");
+      leaks(res.body);
+    });
+
+    it("answers 400 to invalid query values that reach the database, without the Prisma message", async () => {
+      const res = await request(app)
+        .get("/api/v1/employees?status=NOT_A_STATUS")
+        .set("Authorization", `Bearer ${token}`);
+      expect(res.status).toBe(400);
+      expect(res.body.error.requestId).toBeTruthy();
+      leaks(res.body);
+    });
+
+    it("answers 409 to unique-constraint violations without exposing the constraint", async () => {
+      const create = () =>
+        request(app)
+          .post("/api/v1/departments")
+          .set("Authorization", `Bearer ${token}`)
+          .send({ name: `Dup ${Math.random()}`, code: "DUP" });
+      expect((await create()).status).toBe(201);
+      const res = await create();
+      expect(res.status).toBe(409);
+      expect(res.body.error.details).toBeUndefined();
+      leaks(res.body);
+    });
+  });
 });
