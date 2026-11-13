@@ -6,6 +6,7 @@ import { authenticate } from "../../middleware/authenticate";
 import { requireRole, requirePermission } from "../../middleware/authorize";
 import { SystemRole } from "@prisma/client";
 import { PERMISSIONS } from "../../config/permissions";
+import { requireSameOrganizationParam } from "../../utils/tenant";
 import {
   createOrganizationSchema,
   updateOrganizationSchema,
@@ -20,6 +21,10 @@ router.use(authenticate);
 
 router.get("/", requireRole(SystemRole.SUPER_ADMIN), asyncHandler(controller.list));
 router.post("/", requireRole(SystemRole.SUPER_ADMIN), validate(createOrganizationSchema), asyncHandler(controller.create));
+
+// Every /:id route below only targets the caller's own organization,
+// except for SUPER_ADMIN.
+router.use("/:id", requireSameOrganizationParam("id"));
 router.get("/:id", asyncHandler(controller.getOne));
 router.get("/:id/stats", asyncHandler(controller.stats));
 router.patch(

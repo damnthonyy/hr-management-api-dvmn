@@ -429,4 +429,33 @@ describe("multi-tenant isolation", () => {
       expect(notification?.status).toBe("UNREAD");
     });
   });
+
+  describe("organizations", () => {
+    it.each([
+      ["GET", "", undefined],
+      ["GET", "/stats", undefined],
+      ["PATCH", "", { name: "Hacked" }],
+      ["PUT", "/settings", { settings: { hacked: true } }],
+      ["PUT", "/subscription", { plan: "ENTERPRISE", seats: 100000 }],
+      ["GET", "/admins", undefined],
+      ["POST", "/admins", { email: `backdoor-${unique}@test.example`, password, firstName: "Back", lastName: "Door" }],
+    ] as const)("%s /organizations/:id%s returns 404", async (method, suffix, body) => {
+      const req = request(app)[method.toLowerCase() as "get" | "post" | "put" | "patch"](`/api/v1/organizations/${b.orgId}${suffix}`).set(asA());
+      const res = await (body ? req.send(body) : req);
+      expect(res.status).toBe(404);
+    });
+
+    it("still lets an admin read its own organization", async () => {
+      const res = await request(app).get(`/api/v1/organizations/${a.orgId}`).set(asA());
+      expect(res.status).toBe(200);
+      expect(res.body.data.id).toBe(a.orgId);
+    });
+
+    it("left the victim organization untouched", async () => {
+      const org = await prisma.organization.findUnique({ where: { id: b.orgId }, include: { subscription: true } });
+      expect(org?.name).toBe(b.name);
+      expect(org?.subscription?.plan).toBe("FREE");
+      expect(await prisma.user.count({ where: { organizationId: b.orgId } })).toBe(1);
+    });
+  });
 });
