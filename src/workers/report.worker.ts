@@ -1,4 +1,4 @@
-import { Worker, type Job } from "bullmq";
+import { UnrecoverableError, Worker, type Job } from "bullmq";
 import { bullConnection } from "../lib/redis";
 import { QUEUE_NAMES, type ReportJob } from "../queues";
 import * as reportService from "../modules/reports/report.service";
@@ -14,7 +14,8 @@ export function createReportWorker(): Worker {
       switch (reportType) {
         case "salary-summary":
           // Jobs queued before includeSalary existed are not trusted with salary data.
-          if (!includeSalary) throw new Error("salary report requested without salary:view");
+          // Permanent failure: retrying cannot grant the permission.
+          if (!includeSalary) throw new UnrecoverableError("salary report requested without salary:view");
           payload = await reportService.salarySummary(organizationId);
           break;
         case "turnover":
