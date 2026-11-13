@@ -10,6 +10,7 @@ import { errorHandler, notFoundHandler } from "./middleware/error";
 import apiRoutes from "./routes";
 import { prisma } from "./lib/prisma";
 import { pingRedis } from "./lib/redis";
+import { isShuttingDown } from "./lib/shutdown";
 
 export function createApp(): Application {
   const app = express();
@@ -39,6 +40,10 @@ export function createApp(): Application {
   app.use(rateLimit());
 
   app.get("/health", async (_req: Request, res: Response) => {
+    if (isShuttingDown()) {
+      res.status(503).json({ success: false, data: { status: "shutting_down" } });
+      return;
+    }
     const checks: Record<string, string> = {};
     try {
       await prisma.$queryRaw`SELECT 1`;
