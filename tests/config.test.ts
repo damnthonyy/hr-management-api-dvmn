@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 
+// A developer's .env would fill in the variables these tests remove.
+vi.mock("dotenv", () => ({ default: { config: () => ({ parsed: {} }) } }));
+
 const loadEnvWith = async (vars: Record<string, string | undefined>) => {
   const saved = { ...process.env };
   for (const [key, value] of Object.entries(vars)) {
