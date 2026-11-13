@@ -4,7 +4,7 @@ import crypto from "crypto";
 import axios from "axios";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
-import { uploadsDir, resolveStoragePath } from "../../lib/storage";
+import { uploadsDir, resolveStoragePath, sanitizeFileName } from "../../lib/storage";
 import { randomToken } from "../../utils/tokens";
 import { recordAudit } from "../../services/audit.service";
 import { enqueueDocumentProcessing } from "../../queues";
@@ -56,7 +56,7 @@ export async function saveUploadedDocument(organizationId: string, file: Uploade
       categoryId: meta.categoryId ?? null,
       uploadedById: meta.uploadedById,
       fileName: file.filename,
-      originalName: file.originalname,
+      originalName: sanitizeFileName(file.originalname),
       mimeType: file.mimetype,
       sizeBytes: file.size,
       storagePath: relative,
@@ -95,9 +95,10 @@ export async function importFromUrl(organizationId: string, data: {
 
   const buffer = Buffer.from(response.data as ArrayBuffer);
   const contentType = String(response.headers["content-type"] ?? "application/octet-stream").split(";")[0];
-  const inferredName = data.fileName ?? path.basename(new URL(data.url).pathname) ?? `import-${randomToken(6)}`;
-  const safeName = inferredName.length > 0 ? inferredName : `import-${randomToken(6)}`;
-  const storedName = `${Date.now()}-${randomToken(8)}-${safeName}`;
+  // The user-supplied name is only kept for display: the file on disk gets
+  // a server-generated name, so "../" in fileName cannot escape uploads/.
+  const safeName = sanitizeFileName(data.fileName ?? path.basename(new URL(data.url).pathname), "import");
+  const storedName = `${Date.now()}-${randomToken(8)}`;
   const absolutePath = path.join(uploadsDir(), storedName);
 
   fs.writeFileSync(absolutePath, buffer);
