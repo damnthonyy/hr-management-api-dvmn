@@ -1,8 +1,36 @@
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
-import { ALL_PERMISSIONS } from "../../config/permissions";
+import { SystemRole } from "@prisma/client";
+import {
+  ALL_PERMISSIONS,
+  canGrantSystemRole,
+  isKnownPermission,
+  missingPermissions,
+} from "../../config/permissions";
+import type { AuthContext } from "../../types/express";
 import { recordAudit } from "../../services/audit.service";
 import { assertOrgRefs } from "../../utils/tenant";
+
+/**
+ * Custom role permissions must be known keys, and the caller can only
+ * hand out permissions they hold themselves.
+ */
+function assertGrantablePermissions(auth: AuthContext, keys: string[]): void {
+  const unknown = keys.filter((key) => !isKnownPermission(key));
+  if (unknown.length > 0) throw ApiError.badRequest("Unknown permissions", { permissions: unknown });
+  const missing = missingPermissions(auth.permissions, keys);
+  if (missing.length > 0) {
+    throw ApiError.forbidden("You cannot grant permissions you do not hold");
+  }
+}
+
+async function rolePermissionKeys(roleId: string): Promise<string[]> {
+  const rows = await prisma.rolePermission.findMany({
+    where: { roleId },
+    select: { permission: { select: { key: true } } },
+  });
+  return rows.map((row) => row.permission.key);
+}
 
 async function findRoleInOrg(organizationId: string, id: string) {
   const role = await prisma.role.findUnique({ where: { id, organizationId } });
@@ -29,11 +57,13 @@ export async function listRoles(organizationId: string) {
   });
 }
 
-export async function createRole(organizationId: string, data: {
+export async function createRole(auth: AuthContext, data: {
   name: string;
   description?: string;
   permissions: string[];
-}, actorId: string) {
+}) {
+  const { organizationId, userId: actorId } = auth;
+  assertGrantablePermissions(auth, data.permissions);
   const permissions = await prisma.permission.findMany({ where: { key: { in: data.permissions } } });
   const role = await prisma.role.create({
     data: {
@@ -54,12 +84,15 @@ export async function createRole(organizationId: string, data: {
   return role;
 }
 
-export async function updateRole(organizationId: string, id: string, data: {
+export async function updateRole(auth: AuthContext, id: string, data: {
   name?: string;
   description?: string;
   permissions?: string[];
-}, actorId: string) {
+}) {
+  const { organizationId, userId: actorId } = auth;
   const existing = await findRoleInOrg(organizationId, id);
+  assertGrantablePermissions(auth, await rolePermissionKeys(id));
+  if (data.permissions) assertGrantablePermissions(auth, data.permissions);
 
   const role = await prisma.$transaction(async (tx) => {
     const updated = await tx.role.update({
@@ -87,9 +120,11 @@ export async function updateRole(organizationId: string, id: string, data: {
   return role;
 }
 
-export async function deleteRole(organizationId: string, id: string, actorId: string) {
+export async function deleteRole(auth: AuthContext, id: string) {
+  const { organizationId, userId: actorId } = auth;
   const existing = await findRoleInOrg(organizationId, id);
   if (existing.isSystem) throw ApiError.badRequest("System roles cannot be deleted");
+  assertGrantablePermissions(auth, await rolePermissionKeys(id));
   await prisma.role.delete({ where: { id, organizationId } });
   await recordAudit({
     organizationId: existing.organizationId,
@@ -101,12 +136,14 @@ export async function deleteRole(organizationId: string, id: string, actorId: st
   return { ok: true };
 }
 
-export async function assignRole(organizationId: string, data: {
+export async function assignRole(auth: AuthContext, data: {
   userId: string;
   roleId: string;
   departmentId?: string;
-}, actorId: string) {
+}) {
+  const { organizationId, userId: actorId } = auth;
   await assertOrgRefs(organizationId, { user: data.userId, role: data.roleId, department: data.departmentId });
+  assertGrantablePermissions(auth, await rolePermissionKeys(data.roleId));
   const assignment = await prisma.userRole.create({
     data: {
       userId: data.userId,
@@ -125,9 +162,11 @@ export async function assignRole(organizationId: string, data: {
   return assignment;
 }
 
-export async function revokeAssignment(organizationId: string, assignmentId: string, actorId: string) {
+export async function revokeAssignment(auth: AuthContext, assignmentId: string) {
+  const { organizationId, userId: actorId } = auth;
   const assignment = await prisma.userRole.findUnique({ where: { id: assignmentId, role: { organizationId } } });
   if (!assignment) throw ApiError.notFound("Assignment not found");
+  assertGrantablePermissions(auth, await rolePermissionKeys(assignment.roleId));
   await prisma.userRole.delete({ where: { id: assignmentId } });
   await recordAudit({
     organizationId,
@@ -139,11 +178,20 @@ export async function revokeAssignment(organizationId: string, assignmentId: str
   return { ok: true };
 }
 
-export async function setSystemRole(organizationId: string, userId: string, systemRole: string, actorId: string) {
-  await assertOrgRefs(organizationId, { user: userId });
+export async function setSystemRole(auth: AuthContext, userId: string, systemRole: SystemRole) {
+  const { organizationId, userId: actorId } = auth;
+  const target = await prisma.user.findUnique({ where: { id: userId, organizationId } });
+  if (!target) throw ApiError.notFound("Referenced user not found");
+  if (target.id === actorId) throw ApiError.forbidden("You cannot change your own system role");
+  // Both the new role and the user's current role must be within the
+  // caller's privileges: an admin can neither promote above themselves
+  // nor demote someone more privileged.
+  if (!canGrantSystemRole(auth, systemRole) || !canGrantSystemRole(auth, target.systemRole)) {
+    throw ApiError.forbidden("You cannot grant or change this system role");
+  }
   const user = await prisma.user.update({
     where: { id: userId, organizationId },
-    data: { systemRole: systemRole as never },
+    data: { systemRole },
     select: { id: true, email: true, systemRole: true, organizationId: true },
   });
   await recordAudit({

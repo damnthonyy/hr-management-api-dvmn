@@ -17,36 +17,36 @@ export async function listRoles(req: Request, res: Response): Promise<void> {
 
 export async function createRole(req: Request, res: Response): Promise<void> {
   const auth = requireAuthContext(req);
-  const role = await service.createRole(auth.organizationId, req.body, auth.userId);
+  const role = await service.createRole(auth, req.body);
   sendCreated(res, role);
 }
 
 export async function updateRole(req: Request, res: Response): Promise<void> {
   const auth = requireAuthContext(req);
-  const role = await service.updateRole(auth.organizationId, req.params.id, req.body, auth.userId);
+  const role = await service.updateRole(auth, req.params.id, req.body);
   sendSuccess(res, role);
 }
 
 export async function deleteRole(req: Request, res: Response): Promise<void> {
   const auth = requireAuthContext(req);
-  await service.deleteRole(auth.organizationId, req.params.id, auth.userId);
+  await service.deleteRole(auth, req.params.id);
   sendNoContent(res);
 }
 
 export async function assignRole(req: Request, res: Response): Promise<void> {
   const auth = requireAuthContext(req);
-  const assignment = await service.assignRole(auth.organizationId, req.body, auth.userId);
+  const assignment = await service.assignRole(auth, req.body);
   sendCreated(res, assignment);
 }
 
 export async function revokeAssignment(req: Request, res: Response): Promise<void> {
   const auth = requireAuthContext(req);
-  await service.revokeAssignment(auth.organizationId, req.params.assignmentId, auth.userId);
+  await service.revokeAssignment(auth, req.params.assignmentId);
   sendNoContent(res);
 }
 
 export async function setSystemRole(req: Request, res: Response): Promise<void> {
   const auth = requireAuthContext(req);
-  const user = await service.setSystemRole(auth.organizationId, req.params.userId, req.body.systemRole, auth.userId);
+  const user = await service.setSystemRole(auth, req.params.userId, req.body.systemRole);
   sendSuccess(res, user);
 }
