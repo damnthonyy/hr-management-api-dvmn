@@ -1,50 +1,110 @@
+# Local stack. Secrets and settings come from a .env file next to this one
+# (see .env.example); docker compose reads it automatically.
+#
+#   docker compose up -d postgres redis   # dependencies only, for `pnpm dev` / tests
+#   docker compose up -d                  # full stack: migrations, API, workers
+
+x-app-env: &app-env
+  NODE_ENV: production
+  DATABASE_URL: postgresql://${POSTGRES_USER:-hr}:${POSTGRES_PASSWORD:-hr}@postgres:5432/${POSTGRES_DB:-hr_management}?schema=public
+  REDIS_URL: redis://redis:6379/0
+  # Required (>= 32 chars, distinct): the API and the workers refuse to start without them.
+  JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-}
+  JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-}
+  CORS_ORIGIN: ${CORS_ORIGIN:-}
+  TRUST_PROXY: ${TRUST_PROXY:-}
+  APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:4000}
+  SMTP_FROM: ${SMTP_FROM:-}
+
+x-depends-on-data: &depends-on-data
+  postgres:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: hr
-      POSTGRES_PASSWORD: hr
-      POSTGRES_DB: hr_management
+      # Development defaults: set strong values in .env for any shared environment.
+      POSTGRES_USER: ${POSTGRES_USER:-hr}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hr}
+      POSTGRES_DB: ${POSTGRES_DB:-hr_management}
+    # Published on the loopback interface only: reachable from this machine
+    # (pnpm dev, tests), not from the network.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      target: migrate
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   api:
     build:
       context: .
       target: runtime
+    restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://hr:hr@postgres:5432/hr_management?schema=public
-      REDIS_URL: redis://redis:6379/0
-      # Required (>= 32 chars, distinct), e.g. in a .env file next to this one:
-      #   JWT_ACCESS_SECRET=$(openssl rand -hex 32)
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-}
+      <<: *app-env
       PORT: 4000
     depends_on:
-      - postgres
-      - redis
+      <<: *depends-on-data
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "4000:4000"
-    command: ["node", "dist/server.js"]
+    volumes:
+      - storage:/app/storage
+    stop_grace_period: 15s
 
   worker:
     build:
       context: .
       target: runtime
-    environment:
-      DATABASE_URL: postgresql://hr:hr@postgres:5432/hr_management?schema=public
-      REDIS_URL: redis://redis:6379/0
+    restart: unless-stopped
+    environment: *app-env
     depends_on:
-      - postgres
-      - redis
+      <<: *depends-on-data
+      migrate:
+        condition: service_completed_successfully
+    # Payslips and processed documents live in the same storage as the API.
+    volumes:
+      - storage:/app/storage
     command: ["node", "dist/workers/index.js"]
+    # The image healthcheck probes the HTTP API, which the worker does not serve.
+    healthcheck:
+      disable: true
+    # Lets active jobs finish (the worker shutdown deadline is 30 s).
+    stop_grace_period: 35s
 
 volumes:
   pgdata:
+  redisdata:
+  storage:

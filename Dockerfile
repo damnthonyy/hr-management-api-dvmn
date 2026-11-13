@@ -14,6 +14,17 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN pnpm prisma generate && pnpm build && pnpm prune --prod --ignore-scripts
 
+# One-off image that applies the migrations (the prisma CLI is a
+# devDependency and is not in the runtime image). Run it before starting a
+# new version of the API: `docker compose run --rm migrate`, or as a release
+# step in the deployment pipeline.
+FROM base AS migrate
+COPY --from=deps --chown=node:node /app/node_modules ./node_modules
+COPY --chown=node:node package.json ./
+COPY --chown=node:node prisma ./prisma
+USER node
+CMD ["node_modules/.bin/prisma", "migrate", "deploy"]
+
 FROM base AS runtime
 ENV NODE_ENV=production
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
