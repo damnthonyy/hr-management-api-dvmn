@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: hr
+      POSTGRES_PASSWORD: hr
+      POSTGRES_DB: hr_management
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: .
+      target: runtime
+    environment:
+      DATABASE_URL: postgresql://hr:hr@postgres:5432/hr_management?schema=public
+      REDIS_URL: redis://redis:6379/0
+      JWT_ACCESS_SECRET: change-me-access
+      JWT_REFRESH_SECRET: change-me-refresh
+      PORT: 4000
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "4000:4000"
+    command: ["node", "dist/server.js"]
+
+  worker:
+    build:
+      context: .
+      target: runtime
+    environment:
+      DATABASE_URL: postgresql://hr:hr@postgres:5432/hr_management?schema=public
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+    command: ["node", "dist/workers/index.js"]
+
+volumes:
+  pgdata:

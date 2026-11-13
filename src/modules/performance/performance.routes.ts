@@ -1,0 +1,33 @@
+import { Router } from "express";
+import * as controller from "./performance.controller";
+import { asyncHandler } from "../../utils/asyncHandler";
+import { validate } from "../../middleware/validate";
+import { authenticate } from "../../middleware/authenticate";
+import { requirePermission } from "../../middleware/authorize";
+import { PERMISSIONS } from "../../config/permissions";
+import {
+  createCycleSchema,
+  createReviewSchema,
+  updateReviewSchema,
+  createObjectiveSchema,
+  updateObjectiveSchema,
+} from "./performance.validation";
+
+const router = Router();
+
+router.use(authenticate);
+
+router.get("/cycles", requirePermission(PERMISSIONS.PERFORMANCE_VIEW), asyncHandler(controller.listCycles));
+router.post("/cycles", requirePermission(PERMISSIONS.PERFORMANCE_MANAGE), validate(createCycleSchema), asyncHandler(controller.createCycle));
+
+router.get("/reviews", requirePermission(PERMISSIONS.PERFORMANCE_VIEW), asyncHandler(controller.listReviews));
+router.post("/reviews", requirePermission(PERMISSIONS.PERFORMANCE_MANAGE), validate(createReviewSchema), asyncHandler(controller.createReview));
+router.get("/reviews/:id", requirePermission(PERMISSIONS.PERFORMANCE_VIEW), asyncHandler(controller.getReview));
+router.patch("/reviews/:id", requirePermission(PERMISSIONS.PERFORMANCE_MANAGE), validate(updateReviewSchema), asyncHandler(controller.updateReview));
+
+router.get("/objectives/:employeeId", requirePermission(PERMISSIONS.PERFORMANCE_VIEW), asyncHandler(controller.listObjectives));
+router.post("/objectives", requirePermission(PERMISSIONS.PERFORMANCE_MANAGE), validate(createObjectiveSchema), asyncHandler(controller.createObjective));
+router.patch("/objectives/:id", requirePermission(PERMISSIONS.PERFORMANCE_MANAGE), validate(updateObjectiveSchema), asyncHandler(controller.updateObjective));
+router.delete("/objectives/:id", requirePermission(PERMISSIONS.PERFORMANCE_MANAGE), asyncHandler(controller.deleteObjective));
+
+export default router;
