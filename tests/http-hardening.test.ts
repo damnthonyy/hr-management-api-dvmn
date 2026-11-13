@@ -204,8 +204,20 @@ describe("HTTP hardening", () => {
 
     it("always sets an expiry on counters, and repairs counters left without one", async () => {
       const redis = getRedis();
-      const key = "rl:global:::ffff:127.0.0.1";
-      await redis.set(key, "1"); // what the old INCR-then-EXPIRE code could leave behind
+      await request(app).get("/health");
+      // The key depends on how the client connected (127.0.0.1 or ::ffff:127.0.0.1).
+      const keys: string[] = [];
+      let cursor = "0";
+      do {
+        const [next, page] = await redis.scan(cursor, "MATCH", "rl:global:*", "COUNT", 1000);
+        keys.push(...page);
+        cursor = next;
+      } while (cursor !== "0");
+      expect(keys).toHaveLength(1);
+      const key = keys[0];
+      expect(await redis.ttl(key)).toBeGreaterThan(0);
+
+      await redis.persist(key); // what the old INCR-then-EXPIRE code could leave behind
       expect(await redis.ttl(key)).toBe(-1);
       await request(app).get("/health");
       expect(await redis.ttl(key)).toBeGreaterThan(0);
