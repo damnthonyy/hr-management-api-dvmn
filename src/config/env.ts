@@ -1,7 +1,8 @@
 import dotenv from "dotenv";
 import { z } from "zod";
 
-dotenv.config();
+// quiet: no "injected env" banner on stdout (it would break JSON log lines).
+dotenv.config({ quiet: true });
 
 /**
  * Environment, validated once at startup. Any invalid value stops the

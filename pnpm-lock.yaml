@@ -27,8 +27,8 @@ importers:
         specifier: 2.8.6
         version: 2.8.6
       dotenv:
-        specifier: 16.4.5
-        version: 16.4.5
+        specifier: 18.0.10
+        version: 18.0.10
       express:
         specifier: ^4.22.3
         version: 4.22.3
@@ -892,9 +892,10 @@ packages:
   dezalgo@1.0.4:
     resolution: {integrity: sha512-rXSP0bf+5n0Qonsb+SVVfNfIsimO4HEtmnIpPHY8Q1UCzKlQrDMfdobr8nJOOsRgWCyMRqeSBQzmWUMq7zvVig==}
 
-  dotenv@16.4.5:
-    resolution: {integrity: sha512-ZmdL2rui+eB2YwhsWzjInR8LldtZHGDoQ1ugH85ppHKwpUHL7j7rN0Ti9NCnGiQbhaZ11FpR+7ao1dNsmduNUg==}
+  dotenv@18.0.10:
+    resolution: {integrity: sha512-89FAA1xchzK2mxVWdr5F/0rldwiueXs6zJM86rO66EzekR1iBdiXRthyG+m5GvkJaFH3C2LESzamTkgndmLT2A==}
     engines: {node: '>=12'}
+    hasBin: true
 
   dunder-proto@1.0.1:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
@@ -2490,7 +2491,7 @@ snapshots:
       asap: 2.0.6
       wrappy: 1.0.2
 
-  dotenv@16.4.5: {}
+  dotenv@18.0.10: {}
 
   dunder-proto@1.0.1:
     dependencies:
