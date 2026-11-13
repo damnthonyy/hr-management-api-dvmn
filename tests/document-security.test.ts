@@ -56,6 +56,15 @@ describe("document security", () => {
       expect(fs.existsSync(`${uploadsDir()}/${res.body.data.fileName}`)).toBe(true);
     });
 
+    it("keeps non-ASCII file names intact", async () => {
+      const res = await upload().attach("file", PDF, {
+        filename: "Fiche de paie été 2026.pdf",
+        contentType: "application/pdf",
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.data.originalName).toBe("Fiche de paie été 2026.pdf");
+    });
+
     it("accepts a real PNG", async () => {
       const res = await upload().attach("file", PNG, { filename: "photo.png", contentType: "image/png" });
       expect(res.status).toBe(201);

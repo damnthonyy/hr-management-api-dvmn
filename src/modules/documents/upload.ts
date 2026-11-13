@@ -21,6 +21,9 @@ const storage = multer.diskStorage({
 export const upload = multer({
   storage,
   limits: { fileSize: env.maxUploadBytes, files: 1, fields: 10, fieldSize: 1024 },
+  // Browsers and HTTP clients send file names as UTF-8; the latin1 default
+  // turned "été" into "Ã©tÃ©".
+  defParamCharset: "utf8",
   fileFilter: (_req, file, cb) => {
     if (isAllowedMimeType(file.mimetype)) {
       cb(null, true);
