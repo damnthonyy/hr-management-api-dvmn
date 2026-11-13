@@ -123,6 +123,33 @@ export async function createRequest(auth: AuthContext, data: {
   return request;
 }
 
+/** Moves a PENDING request to its decision, or throws 409 if it was decided in the meantime. */
+async function claimPendingRequest(
+  tx: Prisma.TransactionClient,
+  id: string,
+  organizationId: string,
+  data: Prisma.LeaveRequestUncheckedUpdateManyInput
+): Promise<void> {
+  const claimed = await tx.leaveRequest.updateMany({ where: { id, organizationId, status: "PENDING" }, data });
+  if (claimed.count === 0) throw ApiError.conflict("This leave request has already been decided");
+}
+
+/** Adds (or, with a negative value, gives back) used days on the balance of the request's year, if any. */
+async function adjustBalance(
+  tx: Prisma.TransactionClient,
+  request: { employeeId: string; leaveTypeId: string; startDate: Date },
+  days: Prisma.Decimal
+): Promise<void> {
+  await tx.leaveBalance.updateMany({
+    where: {
+      employeeId: request.employeeId,
+      leaveTypeId: request.leaveTypeId,
+      year: request.startDate.getFullYear(),
+    },
+    data: { usedDays: { increment: days } },
+  });
+}
+
 export async function approveRequest(auth: AuthContext, id: string, note?: string) {
   const { organizationId, userId: approverUserId } = auth;
   const request = await prisma.leaveRequest.findUnique({
@@ -137,33 +164,19 @@ export async function approveRequest(auth: AuthContext, id: string, note?: strin
     throw ApiError.badRequest("Only pending requests can be approved");
   }
 
-  const year = request.startDate.getFullYear();
-  const balance = await prisma.leaveBalance.findUnique({
-    where: {
-      employeeId_leaveTypeId_year: {
-        employeeId: request.employeeId,
-        leaveTypeId: request.leaveTypeId,
-        year,
-      },
-    },
-  });
-
-  const updated = await prisma.leaveRequest.update({
-    where: { id, organizationId },
-    data: {
+  // The status change is conditional on PENDING and the balance is debited
+  // in the same transaction: two concurrent approvals no longer debit the
+  // balance twice.
+  const updated = await prisma.$transaction(async (tx) => {
+    await claimPendingRequest(tx, id, organizationId, {
       status: "APPROVED",
       approverId: approverUserId,
       decidedAt: new Date(),
       decisionNote: note ?? null,
-    },
-  });
-
-  if (balance) {
-    await prisma.leaveBalance.update({
-      where: { id: balance.id },
-      data: { usedDays: { increment: request.days } },
     });
-  }
+    await adjustBalance(tx, request, request.days);
+    return tx.leaveRequest.findUniqueOrThrow({ where: { id } });
+  });
 
   if (request.employee.userId) {
     await enqueueNotification({
@@ -203,9 +216,14 @@ export async function rejectRequest(auth: AuthContext, id: string, note?: string
   if (request.status !== "PENDING") {
     throw ApiError.badRequest("Only pending requests can be rejected");
   }
-  const updated = await prisma.leaveRequest.update({
-    where: { id, organizationId },
-    data: { status: "REJECTED", approverId: approverUserId, decidedAt: new Date(), decisionNote: note ?? null },
+  const updated = await prisma.$transaction(async (tx) => {
+    await claimPendingRequest(tx, id, organizationId, {
+      status: "REJECTED",
+      approverId: approverUserId,
+      decidedAt: new Date(),
+      decisionNote: note ?? null,
+    });
+    return tx.leaveRequest.findUniqueOrThrow({ where: { id } });
   });
   if (request.employee.userId) {
     await enqueueNotification({
@@ -236,9 +254,17 @@ export async function cancelRequest(auth: AuthContext, id: string) {
   if (request.status === "REJECTED" || request.status === "CANCELED") {
     throw ApiError.badRequest("This leave request is already closed");
   }
-  const updated = await prisma.leaveRequest.update({
-    where: { id, organizationId },
-    data: { status: "CANCELED" },
+  // Cancelling an approved request gives the days back to the balance. The
+  // update is conditional on the status read above, so a concurrent decision
+  // makes this call fail (409) instead of using a stale status.
+  const updated = await prisma.$transaction(async (tx) => {
+    const moved = await tx.leaveRequest.updateMany({
+      where: { id, organizationId, status: request.status },
+      data: { status: "CANCELED" },
+    });
+    if (moved.count === 0) throw ApiError.conflict("This leave request was modified concurrently, please retry");
+    if (request.status === "APPROVED") await adjustBalance(tx, request, request.days.negated());
+    return tx.leaveRequest.findUniqueOrThrow({ where: { id } });
   });
   await recordAudit({
     organizationId: request.organizationId,
