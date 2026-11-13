@@ -270,16 +270,16 @@ describe("multi-tenant isolation", () => {
 
   describe("departments & teams", () => {
     it.each([
-      ["GET", () => `/api/v1/departments/${victim.departmentId}`, undefined],
-      ["PATCH", () => `/api/v1/departments/${victim.departmentId}`, { name: "Hacked" }],
-      ["DELETE", () => `/api/v1/departments/${victim.departmentId}`, undefined],
-      ["PUT", () => `/api/v1/departments/${victim.departmentId}/manager`, () => ({ managerId: victim.employeeId })],
-      ["POST", () => `/api/v1/departments/${victim.departmentId}/employees`, () => ({ employeeId: victim.employeeId })],
-      ["POST", () => "/api/v1/departments/transfer", () => ({ employeeId: victim.employeeId, targetDepartmentId: victim.departmentId })],
-      ["PATCH", () => `/api/v1/departments/teams/${victim.teamId}`, { name: "Hacked" }],
-      ["DELETE", () => `/api/v1/departments/teams/${victim.teamId}`, undefined],
-      ["POST", () => `/api/v1/departments/teams/${victim.teamId}/members`, () => ({ employeeId: victim.employeeId })],
-      ["DELETE", () => `/api/v1/departments/teams/members/${victim.employeeId}`, undefined],
+      ["GET", (): string => `/api/v1/departments/${victim.departmentId}`, undefined],
+      ["PATCH", (): string => `/api/v1/departments/${victim.departmentId}`, { name: "Hacked" }],
+      ["DELETE", (): string => `/api/v1/departments/${victim.departmentId}`, undefined],
+      ["PUT", (): string => `/api/v1/departments/${victim.departmentId}/manager`, (): object => ({ managerId: victim.employeeId })],
+      ["POST", (): string => `/api/v1/departments/${victim.departmentId}/employees`, (): object => ({ employeeId: victim.employeeId })],
+      ["POST", (): string => "/api/v1/departments/transfer", (): object => ({ employeeId: victim.employeeId, targetDepartmentId: victim.departmentId })],
+      ["PATCH", (): string => `/api/v1/departments/teams/${victim.teamId}`, { name: "Hacked" }],
+      ["DELETE", (): string => `/api/v1/departments/teams/${victim.teamId}`, undefined],
+      ["POST", (): string => `/api/v1/departments/teams/${victim.teamId}/members`, (): object => ({ employeeId: victim.employeeId })],
+      ["DELETE", (): string => `/api/v1/departments/teams/members/${victim.employeeId}`, undefined],
     ] as const)("%s %s returns 404", async (method, url, body) => {
       const req = request(app)[method.toLowerCase() as "get" | "post" | "put" | "patch" | "delete"](url()).set(asA());
       const payload = typeof body === "function" ? body() : body;
@@ -307,14 +307,14 @@ describe("multi-tenant isolation", () => {
   describe("leave", () => {
     const today = () => new Date().toISOString();
     it.each([
-      ["POST", () => `/api/v1/leave/requests/${victim.leaveRequestId}/approve`, {}],
-      ["POST", () => `/api/v1/leave/requests/${victim.leaveRequestId}/reject`, {}],
-      ["POST", () => `/api/v1/leave/requests/${victim.leaveRequestId}/cancel`, {}],
-      ["GET", () => `/api/v1/leave/balances/${victim.employeeId}`, undefined],
-      ["GET", () => `/api/v1/leave/history/${victim.employeeId}`, undefined],
-      ["GET", () => `/api/v1/leave/calendar/${victim.departmentId}`, undefined],
-      ["PUT", () => "/api/v1/leave/balances", () => ({ employeeId: victim.employeeId, leaveTypeId: victim.leaveTypeId, year: 2026, entitledDays: 999 })],
-      ["POST", () => "/api/v1/leave/requests", () => ({ employeeId: victim.employeeId, leaveTypeId: victim.leaveTypeId, startDate: today(), endDate: today() })],
+      ["POST", (): string => `/api/v1/leave/requests/${victim.leaveRequestId}/approve`, {}],
+      ["POST", (): string => `/api/v1/leave/requests/${victim.leaveRequestId}/reject`, {}],
+      ["POST", (): string => `/api/v1/leave/requests/${victim.leaveRequestId}/cancel`, {}],
+      ["GET", (): string => `/api/v1/leave/balances/${victim.employeeId}`, undefined],
+      ["GET", (): string => `/api/v1/leave/history/${victim.employeeId}`, undefined],
+      ["GET", (): string => `/api/v1/leave/calendar/${victim.departmentId}`, undefined],
+      ["PUT", (): string => "/api/v1/leave/balances", (): object => ({ employeeId: victim.employeeId, leaveTypeId: victim.leaveTypeId, year: 2026, entitledDays: 999 })],
+      ["POST", (): string => "/api/v1/leave/requests", (): object => ({ employeeId: victim.employeeId, leaveTypeId: victim.leaveTypeId, startDate: today(), endDate: today() })],
     ] as const)("%s %s returns 404", async (method, url, body) => {
       const req = request(app)[method.toLowerCase() as "get" | "post" | "put"](url()).set(asA());
       const payload = typeof body === "function" ? body() : body;
@@ -332,15 +332,15 @@ describe("multi-tenant isolation", () => {
 
   describe("payroll", () => {
     it.each([
-      ["POST", () => `/api/v1/payroll/periods/${victim.periodId}/generate`, {}],
-      ["GET", () => `/api/v1/payroll/periods/${victim.periodId}/records`, undefined],
-      ["GET", () => `/api/v1/payroll/periods/${victim.periodId}/report`, undefined],
-      ["POST", () => `/api/v1/payroll/periods/${victim.periodId}/submit`, {}],
-      ["POST", () => `/api/v1/payroll/periods/${victim.periodId}/approve`, {}],
-      ["POST", () => `/api/v1/payroll/periods/${victim.periodId}/pay`, {}],
-      ["GET", () => `/api/v1/payroll/records/${victim.payrollRecordId}`, undefined],
-      ["POST", () => `/api/v1/payroll/records/${victim.payrollRecordId}/bonuses`, { label: "x", amount: 1000000 }],
-      ["POST", () => `/api/v1/payroll/records/${victim.payrollRecordId}/deductions`, { label: "x", amount: 1000000 }],
+      ["POST", (): string => `/api/v1/payroll/periods/${victim.periodId}/generate`, {}],
+      ["GET", (): string => `/api/v1/payroll/periods/${victim.periodId}/records`, undefined],
+      ["GET", (): string => `/api/v1/payroll/periods/${victim.periodId}/report`, undefined],
+      ["POST", (): string => `/api/v1/payroll/periods/${victim.periodId}/submit`, {}],
+      ["POST", (): string => `/api/v1/payroll/periods/${victim.periodId}/approve`, {}],
+      ["POST", (): string => `/api/v1/payroll/periods/${victim.periodId}/pay`, {}],
+      ["GET", (): string => `/api/v1/payroll/records/${victim.payrollRecordId}`, undefined],
+      ["POST", (): string => `/api/v1/payroll/records/${victim.payrollRecordId}/bonuses`, { label: "x", amount: 1000000 }],
+      ["POST", (): string => `/api/v1/payroll/records/${victim.payrollRecordId}/deductions`, { label: "x", amount: 1000000 }],
     ] as const)("%s %s returns 404", async (method, url, body) => {
       const req = request(app)[method.toLowerCase() as "get" | "post"](url()).set(asA());
       const res = await (body ? req.send(body) : req);
@@ -363,13 +363,13 @@ describe("multi-tenant isolation", () => {
 
   describe("performance", () => {
     it.each([
-      ["GET", () => `/api/v1/performance/reviews/${victim.reviewId}`, undefined],
-      ["PATCH", () => `/api/v1/performance/reviews/${victim.reviewId}`, () => ({ summary: "Hacked" })],
-      ["POST", () => "/api/v1/performance/reviews", () => ({ cycleId: victim.cycleId, employeeId: victim.employeeId })],
-      ["GET", () => `/api/v1/performance/objectives/${victim.employeeId}`, undefined],
-      ["POST", () => "/api/v1/performance/objectives", () => ({ employeeId: victim.employeeId, title: "Injected" })],
-      ["PATCH", () => `/api/v1/performance/objectives/${victim.objectiveId}`, () => ({ title: "Hacked" })],
-      ["DELETE", () => `/api/v1/performance/objectives/${victim.objectiveId}`, undefined],
+      ["GET", (): string => `/api/v1/performance/reviews/${victim.reviewId}`, undefined],
+      ["PATCH", (): string => `/api/v1/performance/reviews/${victim.reviewId}`, (): object => ({ summary: "Hacked" })],
+      ["POST", (): string => "/api/v1/performance/reviews", (): object => ({ cycleId: victim.cycleId, employeeId: victim.employeeId })],
+      ["GET", (): string => `/api/v1/performance/objectives/${victim.employeeId}`, undefined],
+      ["POST", (): string => "/api/v1/performance/objectives", (): object => ({ employeeId: victim.employeeId, title: "Injected" })],
+      ["PATCH", (): string => `/api/v1/performance/objectives/${victim.objectiveId}`, (): object => ({ title: "Hacked" })],
+      ["DELETE", (): string => `/api/v1/performance/objectives/${victim.objectiveId}`, undefined],
     ] as const)("%s %s returns 404", async (method, url, body) => {
       const req = request(app)[method.toLowerCase() as "get" | "post" | "patch" | "delete"](url()).set(asA());
       const payload = typeof body === "function" ? body() : body;
@@ -395,11 +395,11 @@ describe("multi-tenant isolation", () => {
 
   describe("roles", () => {
     it.each([
-      ["PATCH", () => `/api/v1/roles/${victim.roleId}`, () => ({ name: "Hacked" })],
-      ["DELETE", () => `/api/v1/roles/${victim.roleId}`, undefined],
-      ["DELETE", () => `/api/v1/roles/assignments/${victim.assignmentId}`, undefined],
-      ["POST", () => "/api/v1/roles/assignments", () => ({ userId: b.userId, roleId: victim.roleId })],
-      ["PUT", () => `/api/v1/roles/users/${b.userId}/system-role`, () => ({ systemRole: "EMPLOYEE" })],
+      ["PATCH", (): string => `/api/v1/roles/${victim.roleId}`, (): object => ({ name: "Hacked" })],
+      ["DELETE", (): string => `/api/v1/roles/${victim.roleId}`, undefined],
+      ["DELETE", (): string => `/api/v1/roles/assignments/${victim.assignmentId}`, undefined],
+      ["POST", (): string => "/api/v1/roles/assignments", (): object => ({ userId: b.userId, roleId: victim.roleId })],
+      ["PUT", (): string => `/api/v1/roles/users/${b.userId}/system-role`, (): object => ({ systemRole: "EMPLOYEE" })],
     ] as const)("%s %s returns 404", async (method, url, body) => {
       const req = request(app)[method.toLowerCase() as "post" | "put" | "patch" | "delete"](url()).set(asA());
       const payload = typeof body === "function" ? body() : body;

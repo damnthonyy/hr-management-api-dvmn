@@ -1,4 +1,4 @@
-import { PrismaClient, SystemRole, Prisma } from "@prisma/client";
+import { PrismaClient, SystemRole, Prisma, type Employee } from "@prisma/client";
 import argon2 from "argon2";
 import crypto from "crypto";
 
@@ -205,7 +205,7 @@ async function main(): Promise<void> {
       { role: SystemRole.DEPARTMENT_MANAGER, title: "Department Manager" },
     ];
 
-    const employees = [];
+    const employees: Employee[] = [];
     const headcount = 18;
     let managerEmployeeId: string | null = null;
 
@@ -241,7 +241,7 @@ async function main(): Promise<void> {
         }
       }
 
-      const employee = await prisma.employee.create({
+      const employee: Employee = await prisma.employee.create({
         data: {
           organizationId: organization.id,
           userId,
