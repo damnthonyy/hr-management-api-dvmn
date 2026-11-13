@@ -25,10 +25,10 @@ export async function unreadCount(userId: string) {
 }
 
 export async function markRead(id: string, userId: string) {
-  const notification = await prisma.notification.findUnique({ where: { id } });
+  const notification = await prisma.notification.findUnique({ where: { id, userId } });
   if (!notification) throw ApiError.notFound("Notification not found");
   return prisma.notification.update({
-    where: { id },
+    where: { id, userId },
     data: { status: "READ", readAt: new Date() },
   });
 }
