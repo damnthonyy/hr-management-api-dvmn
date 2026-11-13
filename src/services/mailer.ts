@@ -14,9 +14,25 @@ export async function deliverEmail(message: OutboundEmail): Promise<void> {
   );
 }
 
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
+export function escapeHtml(value: unknown): string {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => HTML_ESCAPES[char]);
+}
+
+/**
+ * Context values include user-controlled data (names, organization names):
+ * everything is escaped so it cannot inject markup or links into the email.
+ */
 export function renderTemplate(template: string, context: Record<string, unknown>): string {
   const rows = Object.entries(context)
-    .map(([key, value]) => `<tr><td>${key}</td><td>${String(value)}</td></tr>`)
+    .map(([key, value]) => `<tr><td>${escapeHtml(key)}</td><td>${escapeHtml(value)}</td></tr>`)
     .join("");
-  return `<h1>${template}</h1><table>${rows}</table>`;
+  return `<h1>${escapeHtml(template)}</h1><table>${rows}</table>`;
 }
