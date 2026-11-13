@@ -17,15 +17,37 @@ function asInt(name: string, fallback: number): number {
   return Number.isNaN(parsed) ? fallback : parsed;
 }
 
+const isProduction = process.env.NODE_ENV === "production";
+
+/**
+ * JWT secrets: the development fallbacks are public (they are in the
+ * repository), so production refuses to start without strong, distinct
+ * secrets.
+ */
+function jwtSecret(name: string, devFallback: string): string {
+  const value = process.env[name];
+  if (!isProduction) return value || devFallback;
+  if (!value || value.length < 32) {
+    throw new Error(`${name} must be set to a random string of at least 32 characters in production`);
+  }
+  return value;
+}
+
+const accessSecret = jwtSecret("JWT_ACCESS_SECRET", "dev-access-secret-change-me");
+const refreshSecret = jwtSecret("JWT_REFRESH_SECRET", "dev-refresh-secret-change-me");
+if (accessSecret === refreshSecret) {
+  throw new Error("JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different");
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
-  isProduction: process.env.NODE_ENV === "production",
+  isProduction,
   port: asInt("PORT", 4000),
   databaseUrl: required("DATABASE_URL"),
   redisUrl: required("REDIS_URL"),
   jwt: {
-    accessSecret: required("JWT_ACCESS_SECRET", "dev-access-secret-change-me"),
-    refreshSecret: required("JWT_REFRESH_SECRET", "dev-refresh-secret-change-me"),
+    accessSecret,
+    refreshSecret,
     accessTtl: asInt("JWT_ACCESS_TTL", 900),
     refreshTtl: asInt("JWT_REFRESH_TTL", 1209600),
   },

@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import jwt from "jsonwebtoken";
+import { env } from "../src/config/env";
 import request from "supertest";
 import { createApp } from "../src/app";
 import { prisma } from "../src/lib/prisma";
@@ -261,6 +263,87 @@ describe("auth security", () => {
       const after = await prisma.user.findUniqueOrThrow({ where: { id: account.userId } });
       expect(after.failedLoginCount).toBe(0);
       expect(after.lockedUntil).toBeNull();
+    });
+  });
+
+  describe("JWT hardening", () => {
+    let claims: Record<string, unknown>;
+
+    beforeAll(async () => {
+      const account = await register("jwt");
+      claims = jwt.decode(account.accessToken) as Record<string, unknown>;
+      delete claims.iat;
+      delete claims.exp;
+      delete claims.iss;
+    });
+
+    const me = (token: string) => request(app).get("/api/v1/auth/me").set(bearer(token));
+
+    it("accepts a well-formed token", async () => {
+      const token = jwt.sign(claims, env.jwt.accessSecret, { algorithm: "HS256", issuer: "hr-management-api" });
+      expect((await me(token)).status).toBe(200);
+    });
+
+    it("rejects alg=none tokens", async () => {
+      const token = jwt.sign(claims, "", { algorithm: "none", issuer: "hr-management-api" });
+      expect((await me(token)).status).toBe(401);
+    });
+
+    it("rejects tokens signed with another algorithm, even with the right secret", async () => {
+      const token = jwt.sign(claims, env.jwt.accessSecret, { algorithm: "HS512", issuer: "hr-management-api" });
+      expect((await me(token)).status).toBe(401);
+    });
+
+    it("rejects tokens without the expected issuer", async () => {
+      const token = jwt.sign(claims, env.jwt.accessSecret, { algorithm: "HS256" });
+      expect((await me(token)).status).toBe(401);
+    });
+
+    it("rejects a token of the wrong type", async () => {
+      const token = jwt.sign({ ...claims, type: "refresh" }, env.jwt.accessSecret, {
+        algorithm: "HS256",
+        issuer: "hr-management-api",
+      });
+      expect((await me(token)).status).toBe(401);
+    });
+  });
+
+  describe("production secrets", () => {
+    const loadEnvWith = async (vars: Record<string, string | undefined>) => {
+      const saved = { ...process.env };
+      Object.assign(process.env, vars);
+      vi.resetModules();
+      try {
+        return await import("../src/config/env");
+      } finally {
+        process.env = saved;
+        vi.resetModules();
+      }
+    };
+    const strong = "x".repeat(40);
+
+    it("refuses to start in production with the default secrets", async () => {
+      await expect(
+        loadEnvWith({ NODE_ENV: "production", JWT_ACCESS_SECRET: "", JWT_REFRESH_SECRET: "" })
+      ).rejects.toThrow(/JWT_ACCESS_SECRET/);
+    });
+
+    it("refuses short or identical secrets in production", async () => {
+      await expect(
+        loadEnvWith({ NODE_ENV: "production", JWT_ACCESS_SECRET: "short", JWT_REFRESH_SECRET: strong })
+      ).rejects.toThrow(/at least 32/);
+      await expect(
+        loadEnvWith({ NODE_ENV: "production", JWT_ACCESS_SECRET: strong, JWT_REFRESH_SECRET: strong })
+      ).rejects.toThrow(/must be different/);
+    });
+
+    it("starts in production with strong, distinct secrets", async () => {
+      const mod = await loadEnvWith({
+        NODE_ENV: "production",
+        JWT_ACCESS_SECRET: strong,
+        JWT_REFRESH_SECRET: "y".repeat(40),
+      });
+      expect(mod.env.isProduction).toBe(true);
     });
   });
 });
