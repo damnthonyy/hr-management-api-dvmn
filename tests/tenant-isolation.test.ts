@@ -73,6 +73,11 @@ describe("multi-tenant isolation", () => {
     });
     victim.departmentId = department.id;
 
+    const team = await prisma.team.create({
+      data: { organizationId: b.orgId, departmentId: department.id, name: "Victim Team" },
+    });
+    victim.teamId = team.id;
+
     ensureStorage();
     const fileName = `victim-${unique}.txt`;
     fs.writeFileSync(path.join(uploadsDir(), fileName), "confidential payslip");
@@ -196,6 +201,42 @@ describe("multi-tenant isolation", () => {
     it("left the victim document and file untouched", async () => {
       expect(await prisma.document.findUnique({ where: { id: victim.documentId } })).not.toBeNull();
       expect(fs.existsSync(victim.documentFile)).toBe(true);
+    });
+  });
+
+  describe("departments & teams", () => {
+    it.each([
+      ["GET", () => `/api/v1/departments/${victim.departmentId}`, undefined],
+      ["PATCH", () => `/api/v1/departments/${victim.departmentId}`, { name: "Hacked" }],
+      ["DELETE", () => `/api/v1/departments/${victim.departmentId}`, undefined],
+      ["PUT", () => `/api/v1/departments/${victim.departmentId}/manager`, () => ({ managerId: victim.employeeId })],
+      ["POST", () => `/api/v1/departments/${victim.departmentId}/employees`, () => ({ employeeId: victim.employeeId })],
+      ["POST", () => "/api/v1/departments/transfer", () => ({ employeeId: victim.employeeId, targetDepartmentId: victim.departmentId })],
+      ["PATCH", () => `/api/v1/departments/teams/${victim.teamId}`, { name: "Hacked" }],
+      ["DELETE", () => `/api/v1/departments/teams/${victim.teamId}`, undefined],
+      ["POST", () => `/api/v1/departments/teams/${victim.teamId}/members`, () => ({ employeeId: victim.employeeId })],
+      ["DELETE", () => `/api/v1/departments/teams/members/${victim.employeeId}`, undefined],
+    ] as const)("%s %s returns 404", async (method, url, body) => {
+      const req = request(app)[method.toLowerCase() as "get" | "post" | "put" | "patch" | "delete"](url()).set(asA());
+      const payload = typeof body === "function" ? body() : body;
+      const res = await (payload ? req.send(payload) : req);
+      expect(res.status).toBe(404);
+    });
+
+    it("cannot create a team under another org's department", async () => {
+      const res = await request(app)
+        .post("/api/v1/departments/teams")
+        .set(asA())
+        .send({ name: "Intruders", departmentId: victim.departmentId });
+      expect(res.status).toBe(404);
+    });
+
+    it("left the victim department and team untouched", async () => {
+      const department = await prisma.department.findUnique({ where: { id: victim.departmentId } });
+      expect(department?.name).toBe("Victim Dept");
+      expect(department?.managerId).toBeNull();
+      const team = await prisma.team.findUnique({ where: { id: victim.teamId } });
+      expect(team?.name).toBe("Victim Team");
     });
   });
 });
