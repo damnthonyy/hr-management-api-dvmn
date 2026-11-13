@@ -210,4 +210,19 @@ describe("HTTP hardening", () => {
       expect(Date.now() - started).toBeLessThan(5000);
     });
   });
+
+  describe("request id", () => {
+    it("reuses a well-formed X-Request-Id and echoes it", async () => {
+      const res = await request(app).get("/health").set("X-Request-Id", "edge-1234.abcd:5");
+      expect(res.headers["x-request-id"]).toBe("edge-1234.abcd:5");
+    });
+
+    it.each(["fake\" level=error msg=\"admin logged in", "a".repeat(200), "<script>"])(
+      "replaces a malformed X-Request-Id (%s)",
+      async (value) => {
+        const res = await request(app).get("/health").set("X-Request-Id", value);
+        expect(res.headers["x-request-id"]).toMatch(/^[0-9a-f-]{36}$/);
+      }
+    );
+  });
 });
