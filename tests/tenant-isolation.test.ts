@@ -133,6 +133,15 @@ describe("multi-tenant isolation", () => {
     });
     victim.objectiveId = objective.id;
 
+    const role = await prisma.role.create({ data: { organizationId: b.orgId, name: `Victim role ${unique}` } });
+    victim.roleId = role.id;
+    const assignment = await prisma.userRole.create({ data: { userId: b.userId, roleId: role.id } });
+    victim.assignmentId = assignment.id;
+    const notification = await prisma.notification.create({
+      data: { organizationId: b.orgId, userId: b.userId, type: "test", title: "Victim notification" },
+    });
+    victim.notificationId = notification.id;
+
     ensureStorage();
     const fileName = `victim-${unique}.txt`;
     fs.writeFileSync(path.join(uploadsDir(), fileName), "confidential payslip");
@@ -381,6 +390,43 @@ describe("multi-tenant isolation", () => {
       const objective = await prisma.objective.findUnique({ where: { id: victim.objectiveId } });
       expect(objective?.title).toBe("Victim objective");
       expect(await prisma.objective.count({ where: { employeeId: victim.employeeId } })).toBe(1);
+    });
+  });
+
+  describe("roles", () => {
+    it.each([
+      ["PATCH", () => `/api/v1/roles/${victim.roleId}`, () => ({ name: "Hacked" })],
+      ["DELETE", () => `/api/v1/roles/${victim.roleId}`, undefined],
+      ["DELETE", () => `/api/v1/roles/assignments/${victim.assignmentId}`, undefined],
+      ["POST", () => "/api/v1/roles/assignments", () => ({ userId: b.userId, roleId: victim.roleId })],
+      ["PUT", () => `/api/v1/roles/users/${b.userId}/system-role`, () => ({ systemRole: "EMPLOYEE" })],
+    ] as const)("%s %s returns 404", async (method, url, body) => {
+      const req = request(app)[method.toLowerCase() as "post" | "put" | "patch" | "delete"](url()).set(asA());
+      const payload = typeof body === "function" ? body() : body;
+      const res = await (payload ? req.send(payload) : req);
+      expect(res.status).toBe(404);
+    });
+
+    it("cannot assign one of its own roles to another org's user", async () => {
+      const own = await prisma.role.create({ data: { organizationId: a.orgId, name: `Own role ${unique}` } });
+      const res = await request(app).post("/api/v1/roles/assignments").set(asA()).send({ userId: b.userId, roleId: own.id });
+      expect(res.status).toBe(404);
+    });
+
+    it("left the victim roles untouched", async () => {
+      expect((await prisma.role.findUnique({ where: { id: victim.roleId } }))?.name).toBe(`Victim role ${unique}`);
+      expect(await prisma.userRole.findUnique({ where: { id: victim.assignmentId } })).not.toBeNull();
+      expect(await prisma.userRole.count({ where: { userId: b.userId } })).toBe(1);
+      expect((await prisma.user.findUnique({ where: { id: b.userId } }))?.systemRole).toBe("ORGANIZATION_ADMIN");
+    });
+  });
+
+  describe("notifications", () => {
+    it("cannot mark another user's notification as read", async () => {
+      const res = await request(app).post(`/api/v1/notifications/${victim.notificationId}/read`).set(asA());
+      expect(res.status).toBe(404);
+      const notification = await prisma.notification.findUnique({ where: { id: victim.notificationId } });
+      expect(notification?.status).toBe("UNREAD");
     });
   });
 });

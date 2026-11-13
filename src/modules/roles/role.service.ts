@@ -2,6 +2,13 @@ import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { ALL_PERMISSIONS } from "../../config/permissions";
 import { recordAudit } from "../../services/audit.service";
+import { assertOrgRefs } from "../../utils/tenant";
+
+async function findRoleInOrg(organizationId: string, id: string) {
+  const role = await prisma.role.findUnique({ where: { id, organizationId } });
+  if (!role) throw ApiError.notFound("Role not found");
+  return role;
+}
 
 export async function listPermissions() {
   return prisma.permission.findMany({ orderBy: { key: "asc" } });
@@ -47,17 +54,16 @@ export async function createRole(organizationId: string, data: {
   return role;
 }
 
-export async function updateRole(id: string, data: {
+export async function updateRole(organizationId: string, id: string, data: {
   name?: string;
   description?: string;
   permissions?: string[];
 }, actorId: string) {
-  const existing = await prisma.role.findUnique({ where: { id } });
-  if (!existing) throw ApiError.notFound("Role not found");
+  const existing = await findRoleInOrg(organizationId, id);
 
   const role = await prisma.$transaction(async (tx) => {
     const updated = await tx.role.update({
-      where: { id },
+      where: { id, organizationId },
       data: { name: data.name, description: data.description },
     });
     if (data.permissions) {
@@ -81,11 +87,10 @@ export async function updateRole(id: string, data: {
   return role;
 }
 
-export async function deleteRole(id: string, actorId: string) {
-  const existing = await prisma.role.findUnique({ where: { id } });
-  if (!existing) throw ApiError.notFound("Role not found");
+export async function deleteRole(organizationId: string, id: string, actorId: string) {
+  const existing = await findRoleInOrg(organizationId, id);
   if (existing.isSystem) throw ApiError.badRequest("System roles cannot be deleted");
-  await prisma.role.delete({ where: { id } });
+  await prisma.role.delete({ where: { id, organizationId } });
   await recordAudit({
     organizationId: existing.organizationId,
     userId: actorId,
@@ -96,11 +101,12 @@ export async function deleteRole(id: string, actorId: string) {
   return { ok: true };
 }
 
-export async function assignRole(data: {
+export async function assignRole(organizationId: string, data: {
   userId: string;
   roleId: string;
   departmentId?: string;
 }, actorId: string) {
+  await assertOrgRefs(organizationId, { user: data.userId, role: data.roleId, department: data.departmentId });
   const assignment = await prisma.userRole.create({
     data: {
       userId: data.userId,
@@ -108,9 +114,8 @@ export async function assignRole(data: {
       departmentId: data.departmentId ?? null,
     },
   });
-  const user = await prisma.user.findUnique({ where: { id: data.userId }, select: { organizationId: true } });
   await recordAudit({
-    organizationId: user?.organizationId,
+    organizationId,
     userId: actorId,
     action: "role.assigned",
     entityType: "UserRole",
@@ -120,11 +125,12 @@ export async function assignRole(data: {
   return assignment;
 }
 
-export async function revokeAssignment(assignmentId: string, actorId: string) {
-  const assignment = await prisma.userRole.findUnique({ where: { id: assignmentId } });
+export async function revokeAssignment(organizationId: string, assignmentId: string, actorId: string) {
+  const assignment = await prisma.userRole.findUnique({ where: { id: assignmentId, role: { organizationId } } });
   if (!assignment) throw ApiError.notFound("Assignment not found");
   await prisma.userRole.delete({ where: { id: assignmentId } });
   await recordAudit({
+    organizationId,
     userId: actorId,
     action: "role.revoked",
     entityType: "UserRole",
@@ -133,9 +139,10 @@ export async function revokeAssignment(assignmentId: string, actorId: string) {
   return { ok: true };
 }
 
-export async function setSystemRole(userId: string, systemRole: string, actorId: string) {
+export async function setSystemRole(organizationId: string, userId: string, systemRole: string, actorId: string) {
+  await assertOrgRefs(organizationId, { user: userId });
   const user = await prisma.user.update({
-    where: { id: userId },
+    where: { id: userId, organizationId },
     data: { systemRole: systemRole as never },
     select: { id: true, email: true, systemRole: true, organizationId: true },
   });
