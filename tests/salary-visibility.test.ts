@@ -39,13 +39,15 @@ async function createUser(label: string, systemRole: SystemRole) {
 
 describe("salary visibility", () => {
   beforeAll(async () => {
-    const res = await request(app).post("/api/v1/auth/register").send({
-      organizationName: `Salary ${unique}`,
-      email: `salary-admin-${unique}@test.example`,
-      password,
-      firstName: "Salary",
-      lastName: "Admin",
-    });
+    const res = await request(app)
+      .post("/api/v1/auth/register")
+      .send({
+        organizationName: `Salary ${unique}`,
+        email: `salary-admin-${unique}@test.example`,
+        password,
+        firstName: "Salary",
+        lastName: "Admin",
+      });
     expect(res.status).toBe(201);
     orgId = res.body.data.organization.id;
     tokens.admin = res.body.data.tokens.accessToken;

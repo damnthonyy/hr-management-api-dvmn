@@ -1,7 +1,14 @@
 import { type Request, type Response } from "express";
 import * as service from "./leave.service";
 import { parseBody, parseQuery } from "../../middleware/validate";
-import { calendarQuery, createLeaveRequestSchema, createLeaveTypeSchema, decisionSchema, listLeaveRequestsQuery, setBalanceSchema } from "./leave.validation";
+import {
+  calendarQuery,
+  createLeaveRequestSchema,
+  createLeaveTypeSchema,
+  decisionSchema,
+  listLeaveRequestsQuery,
+  setBalanceSchema,
+} from "./leave.validation";
 import { sendSuccess, sendCreated, sendPaginated } from "../../utils/response";
 import { requireAuthContext, requireOrgId } from "../../utils/tenant";
 
@@ -58,5 +65,8 @@ export async function history(req: Request, res: Response): Promise<void> {
 }
 
 export async function calendar(req: Request, res: Response): Promise<void> {
-  sendSuccess(res, await service.departmentCalendar(orgId(req), req.params.departmentId, parseQuery(req, calendarQuery)));
+  sendSuccess(
+    res,
+    await service.departmentCalendar(orgId(req), req.params.departmentId, parseQuery(req, calendarQuery))
+  );
 }

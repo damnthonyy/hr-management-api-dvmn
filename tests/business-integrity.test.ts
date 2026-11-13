@@ -34,30 +34,33 @@ async function createLeaveRequest(startDay: number) {
 }
 
 const usedDays = async () =>
-  Number(
-    (await prisma.leaveBalance.findFirstOrThrow({ where: { employeeId, leaveTypeId, year } })).usedDays
-  );
+  Number((await prisma.leaveBalance.findFirstOrThrow({ where: { employeeId, leaveTypeId, year } })).usedDays);
 
 async function createPeriod(label: string) {
-  const res = await request(app).post("/api/v1/payroll/periods").set(auth()).send({
-    label: `${label} ${unique}`,
-    periodStart: "2027-01-01T00:00:00.000Z",
-    periodEnd: "2027-01-31T00:00:00.000Z",
-    payDate: "2027-02-01T00:00:00.000Z",
-  });
+  const res = await request(app)
+    .post("/api/v1/payroll/periods")
+    .set(auth())
+    .send({
+      label: `${label} ${unique}`,
+      periodStart: "2027-01-01T00:00:00.000Z",
+      periodEnd: "2027-01-31T00:00:00.000Z",
+      payDate: "2027-02-01T00:00:00.000Z",
+    });
   expect(res.status).toBe(201);
   return res.body.data.id as string;
 }
 
 describe("business integrity", () => {
   beforeAll(async () => {
-    const res = await request(app).post("/api/v1/auth/register").send({
-      organizationName: `Integrity ${unique}`,
-      email: `integrity-${unique}@test.example`,
-      password,
-      firstName: "Integrity",
-      lastName: "Admin",
-    });
+    const res = await request(app)
+      .post("/api/v1/auth/register")
+      .send({
+        organizationName: `Integrity ${unique}`,
+        email: `integrity-${unique}@test.example`,
+        password,
+        firstName: "Integrity",
+        lastName: "Admin",
+      });
     expect(res.status).toBe(201);
     orgId = res.body.data.organization.id;
     token = res.body.data.tokens.accessToken;
@@ -73,14 +76,17 @@ describe("business integrity", () => {
         systemRole: SystemRole.EMPLOYEE,
       },
     });
-    const employee = await request(app).post("/api/v1/employees").set(auth()).send({
-      firstName: "Emp",
-      lastName: "Loyee",
-      email: `integrity-employee-${unique}@test.example`,
-      jobTitle: "Engineer",
-      startDate: "2026-01-05T00:00:00.000Z",
-      baseSalary: 60000,
-    });
+    const employee = await request(app)
+      .post("/api/v1/employees")
+      .set(auth())
+      .send({
+        firstName: "Emp",
+        lastName: "Loyee",
+        email: `integrity-employee-${unique}@test.example`,
+        jobTitle: "Engineer",
+        startDate: "2026-01-05T00:00:00.000Z",
+        baseSalary: 60000,
+      });
     expect(employee.status).toBe(201);
     employeeId = employee.body.data.id;
     await prisma.employee.update({ where: { id: employeeId }, data: { userId: employeeUser.id } });
@@ -107,7 +113,9 @@ describe("business integrity", () => {
       const leave = await createLeaveRequest(2);
       const before = await usedDays();
       const results = await Promise.all(
-        Array.from({ length: 5 }, () => request(app).post(`/api/v1/leave/requests/${leave.id}/approve`).set(auth()).send({}))
+        Array.from({ length: 5 }, () =>
+          request(app).post(`/api/v1/leave/requests/${leave.id}/approve`).set(auth()).send({})
+        )
       );
       const statuses = results.map((r) => r.status).sort();
       expect(statuses.filter((s) => s === 200)).toHaveLength(1);
@@ -118,7 +126,9 @@ describe("business integrity", () => {
     it("gives the days back when an approved request is cancelled", async () => {
       const leave = await createLeaveRequest(9);
       const before = await usedDays();
-      expect((await request(app).post(`/api/v1/leave/requests/${leave.id}/approve`).set(auth()).send({})).status).toBe(200);
+      expect((await request(app).post(`/api/v1/leave/requests/${leave.id}/approve`).set(auth()).send({})).status).toBe(
+        200
+      );
       expect(await usedDays()).toBe(before + Number(leave.days));
       expect((await request(app).post(`/api/v1/leave/requests/${leave.id}/cancel`).set(auth())).status).toBe(200);
       expect(await usedDays()).toBe(before);
@@ -135,7 +145,8 @@ describe("business integrity", () => {
   describe("payroll", () => {
     it("enforces the period lifecycle", async () => {
       const periodId = await createPeriod("Lifecycle");
-      const step = (action: string) => request(app).post(`/api/v1/payroll/periods/${periodId}/${action}`).set(auth()).send({});
+      const step = (action: string) =>
+        request(app).post(`/api/v1/payroll/periods/${periodId}/${action}`).set(auth()).send({});
 
       expect((await step("pay")).status).toBe(409);
       expect((await step("approve")).status).toBe(409);
@@ -149,7 +160,10 @@ describe("business integrity", () => {
       expect((await step("pay")).status).toBe(200);
       expect((await step("submit")).status).toBe(409);
 
-      const period = await prisma.payrollPeriod.findUniqueOrThrow({ where: { id: periodId }, include: { records: true } });
+      const period = await prisma.payrollPeriod.findUniqueOrThrow({
+        where: { id: periodId },
+        include: { records: true },
+      });
       expect(period.status).toBe("PAID");
       expect(period.records.every((record) => record.status === "PAID")).toBe(true);
     });
@@ -162,10 +176,16 @@ describe("business integrity", () => {
 
       await Promise.all([
         ...Array.from({ length: 10 }, () =>
-          request(app).post(`/api/v1/payroll/records/${record.id}/bonuses`).set(auth()).send({ label: "Bonus", amount: 100 })
+          request(app)
+            .post(`/api/v1/payroll/records/${record.id}/bonuses`)
+            .set(auth())
+            .send({ label: "Bonus", amount: 100 })
         ),
         ...Array.from({ length: 5 }, () =>
-          request(app).post(`/api/v1/payroll/records/${record.id}/deductions`).set(auth()).send({ label: "Tax", amount: 40 })
+          request(app)
+            .post(`/api/v1/payroll/records/${record.id}/deductions`)
+            .set(auth())
+            .send({ label: "Tax", amount: 40 })
         ),
       ]);
       const updated = await prisma.payrollRecord.findUniqueOrThrow({ where: { id: record.id } });

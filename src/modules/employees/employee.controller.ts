@@ -1,7 +1,14 @@
 import { type Request, type Response } from "express";
 import * as service from "./employee.service";
 import { parseBody, parseQuery } from "../../middleware/validate";
-import { contractSchema, createEmployeeSchema, emergencyContactSchema, listEmployeesQuery, salaryUpdateSchema, updateEmployeeSchema } from "./employee.validation";
+import {
+  contractSchema,
+  createEmployeeSchema,
+  emergencyContactSchema,
+  listEmployeesQuery,
+  salaryUpdateSchema,
+  updateEmployeeSchema,
+} from "./employee.validation";
 import { sendSuccess, sendCreated, sendPaginated, sendNoContent } from "../../utils/response";
 import { requireAuthContext, requireOrgId } from "../../utils/tenant";
 import { ApiError } from "../../utils/apiError";
@@ -10,7 +17,11 @@ import { canManageSalary, canViewSalary, employeeView, redactContract } from "./
 export async function list(req: Request, res: Response): Promise<void> {
   const auth = requireAuthContext(req);
   const { items, meta } = await service.listEmployees(auth.organizationId, parseQuery(req, listEmployeesQuery));
-  sendPaginated(res, items.map((item) => employeeView(auth, item)), meta);
+  sendPaginated(
+    res,
+    items.map((item) => employeeView(auth, item)),
+    meta
+  );
 }
 
 export async function getOne(req: Request, res: Response): Promise<void> {

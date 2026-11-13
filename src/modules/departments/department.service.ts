@@ -57,7 +57,12 @@ export async function getDepartment(organizationId: string, id: string) {
       manager: true,
       parent: true,
       children: true,
-      teams: { include: { lead: { select: { id: true, firstName: true, lastName: true } }, _count: { select: { members: true } } } },
+      teams: {
+        include: {
+          lead: { select: { id: true, firstName: true, lastName: true } },
+          _count: { select: { members: true } },
+        },
+      },
       employees: { select: { id: true, firstName: true, lastName: true, jobTitle: true, status: true } },
     },
   });

@@ -3,7 +3,17 @@ import * as authService from "./auth.service";
 import { sendSuccess, sendCreated } from "../../utils/response";
 import { ApiError } from "../../utils/apiError";
 import { parseBody, parseQuery } from "../../middleware/validate";
-import { changePasswordSchema, forgotPasswordSchema, loginSchema, logoutSchema, refreshSchema, registerSchema, resetPasswordSchema, updateProfileSchema, verifyEmailSchema } from "./auth.validation";
+import {
+  changePasswordSchema,
+  forgotPasswordSchema,
+  loginSchema,
+  logoutSchema,
+  refreshSchema,
+  registerSchema,
+  resetPasswordSchema,
+  updateProfileSchema,
+  verifyEmailSchema,
+} from "./auth.validation";
 
 function meta(req: Request) {
   return { ipAddress: req.ip, userAgent: req.header("user-agent") ?? undefined };

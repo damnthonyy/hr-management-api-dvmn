@@ -49,27 +49,174 @@ const ORGANIZATIONS: OrgBlueprint[] = [
     slug: "nordwind",
     currency: "EUR",
     departments: ["Operations", "Finance", "People", "Engineering", "Customer Success", "Legal"],
-    firstNames: ["Lena", "Omar", "Sofia", "Mateo", "Ingrid", "Tariq", "Nina", "Felix", "Aisha", "Jonas", "Clara", "Ravi", "Elsa", "Noah", "Yuki", "Diego", "Maya", "Paul"],
-    lastNames: ["Berg", "Haddad", "Rossi", "Weber", "Lind", "Khan", "Novak", "Meyer", "Okafor", "Holm", "Dubois", "Patel", "Strand", "Keller", "Tanaka", "Moreno", "Singh", "Braun"],
-    titles: ["Operations Lead", "Financial Analyst", "People Partner", "Backend Engineer", "Support Specialist", "Legal Counsel", "Logistics Coordinator", "Account Manager", "Data Engineer", "Recruiter"],
+    firstNames: [
+      "Lena",
+      "Omar",
+      "Sofia",
+      "Mateo",
+      "Ingrid",
+      "Tariq",
+      "Nina",
+      "Felix",
+      "Aisha",
+      "Jonas",
+      "Clara",
+      "Ravi",
+      "Elsa",
+      "Noah",
+      "Yuki",
+      "Diego",
+      "Maya",
+      "Paul",
+    ],
+    lastNames: [
+      "Berg",
+      "Haddad",
+      "Rossi",
+      "Weber",
+      "Lind",
+      "Khan",
+      "Novak",
+      "Meyer",
+      "Okafor",
+      "Holm",
+      "Dubois",
+      "Patel",
+      "Strand",
+      "Keller",
+      "Tanaka",
+      "Moreno",
+      "Singh",
+      "Braun",
+    ],
+    titles: [
+      "Operations Lead",
+      "Financial Analyst",
+      "People Partner",
+      "Backend Engineer",
+      "Support Specialist",
+      "Legal Counsel",
+      "Logistics Coordinator",
+      "Account Manager",
+      "Data Engineer",
+      "Recruiter",
+    ],
   },
   {
     name: "Brightwave Health",
     slug: "brightwave",
     currency: "USD",
     departments: ["Clinical", "Research", "Finance", "Human Resources", "Information Technology", "Marketing"],
-    firstNames: ["Grace", "Hassan", "Priya", "Daniel", "Zoe", "Marcus", "Lucia", "Ethan", "Fatima", "Oliver", "Hannah", "Kwame", "Isla", "Leo", "Mei", "Samuel", "Nora", "Ivan"],
-    lastNames: ["Bennett", "Ali", "Nair", "Fisher", "Clarke", "Reed", "Marin", "Walsh", "Hassan", "Grant", "Lowe", "Mensah", "Doyle", "Park", "Chen", "Ford", "Hale", "Petrov"],
-    titles: ["Clinical Nurse", "Research Associate", "Accountant", "HR Generalist", "Systems Administrator", "Marketing Specialist", "Lab Technician", "Program Manager", "Data Analyst", "Coordinator"],
+    firstNames: [
+      "Grace",
+      "Hassan",
+      "Priya",
+      "Daniel",
+      "Zoe",
+      "Marcus",
+      "Lucia",
+      "Ethan",
+      "Fatima",
+      "Oliver",
+      "Hannah",
+      "Kwame",
+      "Isla",
+      "Leo",
+      "Mei",
+      "Samuel",
+      "Nora",
+      "Ivan",
+    ],
+    lastNames: [
+      "Bennett",
+      "Ali",
+      "Nair",
+      "Fisher",
+      "Clarke",
+      "Reed",
+      "Marin",
+      "Walsh",
+      "Hassan",
+      "Grant",
+      "Lowe",
+      "Mensah",
+      "Doyle",
+      "Park",
+      "Chen",
+      "Ford",
+      "Hale",
+      "Petrov",
+    ],
+    titles: [
+      "Clinical Nurse",
+      "Research Associate",
+      "Accountant",
+      "HR Generalist",
+      "Systems Administrator",
+      "Marketing Specialist",
+      "Lab Technician",
+      "Program Manager",
+      "Data Analyst",
+      "Coordinator",
+    ],
   },
   {
     name: "Cobalt Studios",
     slug: "cobalt",
     currency: "GBP",
     departments: ["Design", "Engineering", "Production", "Finance", "People Ops", "Business Development"],
-    firstNames: ["Amelia", "Idris", "Chloe", "Victor", "Sara", "Theo", "Naomi", "Hugo", "Layla", "Max", "Ruby", "Ade", "Freya", "Gabriel", "Hana", "Louis", "Esther", "Ben"],
-    lastNames: ["Wright", "Okoye", "Turner", "Kozlov", "Day", "Brooks", "Cole", "Vega", "Aziz", "Shaw", "Frost", "Bello", "Noble", "Ramos", "Kim", "Faure", "Stone", "Webb"],
-    titles: ["Product Designer", "Game Engineer", "Producer", "Finance Partner", "People Ops Lead", "BizDev Manager", "Technical Artist", "QA Engineer", "Animator", "Studio Coordinator"],
+    firstNames: [
+      "Amelia",
+      "Idris",
+      "Chloe",
+      "Victor",
+      "Sara",
+      "Theo",
+      "Naomi",
+      "Hugo",
+      "Layla",
+      "Max",
+      "Ruby",
+      "Ade",
+      "Freya",
+      "Gabriel",
+      "Hana",
+      "Louis",
+      "Esther",
+      "Ben",
+    ],
+    lastNames: [
+      "Wright",
+      "Okoye",
+      "Turner",
+      "Kozlov",
+      "Day",
+      "Brooks",
+      "Cole",
+      "Vega",
+      "Aziz",
+      "Shaw",
+      "Frost",
+      "Bello",
+      "Noble",
+      "Ramos",
+      "Kim",
+      "Faure",
+      "Stone",
+      "Webb",
+    ],
+    titles: [
+      "Product Designer",
+      "Game Engineer",
+      "Producer",
+      "Finance Partner",
+      "People Ops Lead",
+      "BizDev Manager",
+      "Technical Artist",
+      "QA Engineer",
+      "Animator",
+      "Studio Coordinator",
+    ],
   },
 ];
 
@@ -145,7 +292,9 @@ async function main(): Promise<void> {
         employeeLimit: 200,
         timezone: "UTC",
         settings: { onboarding: { completed: true }, features: { payroll: true, performance: true } },
-        subscription: { create: { plan: "BUSINESS", status: "ACTIVE", seats: 200, renewsAt: new Date(Date.now() + 180 * 86400000) } },
+        subscription: {
+          create: { plan: "BUSINESS", status: "ACTIVE", seats: 200, renewsAt: new Date(Date.now() + 180 * 86400000) },
+        },
       },
     });
 
@@ -313,7 +462,7 @@ async function main(): Promise<void> {
 
     // Assign department managers
     for (const [idx, department] of departments.entries()) {
-      const manager = employees[(idx % employees.length)];
+      const manager = employees[idx % employees.length];
       await prisma.department.update({ where: { id: department.id }, data: { managerId: manager.id } });
     }
 
@@ -334,7 +483,12 @@ async function main(): Promise<void> {
     }
 
     // Leave requests in various states
-    const statuses: Array<"PENDING" | "APPROVED" | "REJECTED" | "CANCELED"> = ["PENDING", "APPROVED", "REJECTED", "CANCELED"];
+    const statuses: Array<"PENDING" | "APPROVED" | "REJECTED" | "CANCELED"> = [
+      "PENDING",
+      "APPROVED",
+      "REJECTED",
+      "CANCELED",
+    ];
     for (let i = 0; i < 12; i += 1) {
       const employee = pick(employees, i);
       const leaveType = pick(leaveTypes, i);
@@ -416,8 +570,12 @@ async function main(): Promise<void> {
           status: "APPROVED",
         },
       });
-      await prisma.bonus.create({ data: { payrollRecordId: record.id, label: "Performance bonus", amount: new Prisma.Decimal(bonus.toFixed(2)) } });
-      await prisma.deduction.create({ data: { payrollRecordId: record.id, label: "Tax & benefits", amount: new Prisma.Decimal(deduction.toFixed(2)) } });
+      await prisma.bonus.create({
+        data: { payrollRecordId: record.id, label: "Performance bonus", amount: new Prisma.Decimal(bonus.toFixed(2)) },
+      });
+      await prisma.deduction.create({
+        data: { payrollRecordId: record.id, label: "Tax & benefits", amount: new Prisma.Decimal(deduction.toFixed(2)) },
+      });
     }
 
     // Document categories + documents
@@ -442,7 +600,10 @@ async function main(): Promise<void> {
     }
 
     // Notifications + audit history
-    const notifyUsers = await prisma.user.findMany({ where: { organizationId: organization.id }, select: { id: true } });
+    const notifyUsers = await prisma.user.findMany({
+      where: { organizationId: organization.id },
+      select: { id: true },
+    });
     for (const [i, u] of notifyUsers.entries()) {
       await prisma.notification.create({
         data: {

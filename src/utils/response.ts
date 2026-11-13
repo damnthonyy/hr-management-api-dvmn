@@ -15,12 +15,7 @@ export function sendCreated(res: Response, data: unknown): Response {
   return res.status(201).json({ success: true, data });
 }
 
-export function sendPaginated(
-  res: Response,
-  data: unknown[],
-  meta: PaginationMeta,
-  statusCode = 200
-): Response {
+export function sendPaginated(res: Response, data: unknown[], meta: PaginationMeta, statusCode = 200): Response {
   return res.status(statusCode).json({ success: true, data, meta });
 }
 

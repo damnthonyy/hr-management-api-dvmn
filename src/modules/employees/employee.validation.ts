@@ -21,10 +21,13 @@ export const createEmployeeSchema = z.object({
 
 // Salary changes go through POST /employees/:id/salary (salary:manage, with
 // history): baseSalary and currency cannot be changed here.
-export const updateEmployeeSchema = createEmployeeSchema.omit({ baseSalary: true, currency: true }).partial().extend({
-  status: z.enum(["ACTIVE", "ON_LEAVE", "SUSPENDED", "TERMINATED"]).optional(),
-  terminationDate: z.iso.datetime().optional(),
-});
+export const updateEmployeeSchema = createEmployeeSchema
+  .omit({ baseSalary: true, currency: true })
+  .partial()
+  .extend({
+    status: z.enum(["ACTIVE", "ON_LEAVE", "SUSPENDED", "TERMINATED"]).optional(),
+    terminationDate: z.iso.datetime().optional(),
+  });
 
 export const emergencyContactSchema = z.object({
   name: z.string().min(1).max(120),

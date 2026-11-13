@@ -14,7 +14,13 @@ describe("graceful shutdown", () => {
       exit,
       steps: [
         { name: "a", run: async () => void order.push("a") },
-        { name: "b", run: async () => { order.push("b"); throw new Error("boom"); } },
+        {
+          name: "b",
+          run: async () => {
+            order.push("b");
+            throw new Error("boom");
+          },
+        },
         { name: "c", run: async () => void order.push("c") },
       ],
     });
@@ -59,11 +65,13 @@ describe("graceful shutdown", () => {
     const { port } = server.address() as { port: number };
 
     const response = new Promise<string>((resolve, reject) => {
-      http.get({ port, path: "/slow", agent: new http.Agent({ keepAlive: true }) }, (res) => {
-        let body = "";
-        res.on("data", (chunk) => (body += chunk));
-        res.on("end", () => resolve(body));
-      }).on("error", reject);
+      http
+        .get({ port, path: "/slow", agent: new http.Agent({ keepAlive: true }) }, (res) => {
+          let body = "";
+          res.on("data", (chunk) => (body += chunk));
+          res.on("end", () => resolve(body));
+        })
+        .on("error", reject);
     });
     await requestStarted;
 

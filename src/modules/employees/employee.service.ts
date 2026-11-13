@@ -129,12 +129,7 @@ export async function createEmployee(organizationId: string, data: CreateEmploye
   return employee;
 }
 
-export async function updateEmployee(
-  organizationId: string,
-  id: string,
-  data: UpdateEmployeeInput,
-  actorId: string
-) {
+export async function updateEmployee(organizationId: string, id: string, data: UpdateEmployeeInput, actorId: string) {
   const existing = await findEmployeeInOrg(organizationId, id);
   await assertOrgRefs(organizationId, {
     department: data.departmentId,
@@ -197,11 +192,7 @@ export async function deleteEmployee(organizationId: string, id: string, actorId
   return { ok: true };
 }
 
-export async function addEmergencyContact(
-  organizationId: string,
-  employeeId: string,
-  data: EmergencyContactInput
-) {
+export async function addEmergencyContact(organizationId: string, employeeId: string, data: EmergencyContactInput) {
   await findEmployeeInOrg(organizationId, employeeId);
   return prisma.emergencyContact.create({
     data: {
@@ -219,12 +210,7 @@ export async function listEmergencyContacts(organizationId: string, employeeId: 
   return prisma.emergencyContact.findMany({ where: { employeeId } });
 }
 
-export async function addContract(
-  organizationId: string,
-  employeeId: string,
-  data: ContractInput,
-  actorId: string
-) {
+export async function addContract(organizationId: string, employeeId: string, data: ContractInput, actorId: string) {
   await findEmployeeInOrg(organizationId, employeeId);
   const contract = await prisma.employmentContract.create({
     data: {
@@ -253,7 +239,12 @@ export async function listContracts(organizationId: string, employeeId: string) 
   return prisma.employmentContract.findMany({ where: { employeeId }, orderBy: { startDate: "desc" } });
 }
 
-export async function updateSalary(organizationId: string, employeeId: string, data: SalaryUpdateInput, actorId: string) {
+export async function updateSalary(
+  organizationId: string,
+  employeeId: string,
+  data: SalaryUpdateInput,
+  actorId: string
+) {
   const employee = await findEmployeeInOrg(organizationId, employeeId);
 
   const result = await prisma.$transaction(async (tx) => {

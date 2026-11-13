@@ -103,11 +103,7 @@ export function assertSafeUrl(raw: string): URL {
   return url;
 }
 
-type LookupCallback = (
-  error: NodeJS.ErrnoException | null,
-  address: string | LookupAddress[],
-  family?: number
-) => void;
+type LookupCallback = (error: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void;
 
 /** dns.lookup replacement that refuses non-public addresses. */
 export function safeLookup(hostname: string, options: LookupOptions, callback: LookupCallback): void {
@@ -140,7 +136,10 @@ export interface RemoteFile {
   finalUrl: string;
 }
 
-export async function fetchRemoteFile(rawUrl: string, options: { maxBytes: number; timeoutMs?: number }): Promise<RemoteFile> {
+export async function fetchRemoteFile(
+  rawUrl: string,
+  options: { maxBytes: number; timeoutMs?: number }
+): Promise<RemoteFile> {
   let url = assertSafeUrl(rawUrl);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
     let response;
@@ -172,7 +171,10 @@ export async function fetchRemoteFile(rawUrl: string, options: { maxBytes: numbe
 
     return {
       status: response.status,
-      contentType: String(response.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase(),
+      contentType: String(response.headers["content-type"] ?? "")
+        .split(";")[0]
+        .trim()
+        .toLowerCase(),
       body: Buffer.from(response.data),
       finalUrl: url.toString(),
     };

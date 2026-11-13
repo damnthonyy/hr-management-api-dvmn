@@ -60,13 +60,16 @@ export async function listRequests(organizationId: string, query: ListLeaveReque
   return { items, meta: buildMeta(params, total) };
 }
 
-export async function createRequest(auth: AuthContext, data: {
-  employeeId: string;
-  leaveTypeId: string;
-  startDate: string;
-  endDate: string;
-  reason?: string;
-}) {
+export async function createRequest(
+  auth: AuthContext,
+  data: {
+    employeeId: string;
+    leaveTypeId: string;
+    startDate: string;
+    endDate: string;
+    reason?: string;
+  }
+) {
   const { organizationId, userId: actorId } = auth;
   const employee = await prisma.employee.findUnique({ where: { id: data.employeeId, organizationId } });
   if (!employee) throw ApiError.notFound("Employee not found");
@@ -276,12 +279,15 @@ export async function cancelRequest(auth: AuthContext, id: string) {
   return updated;
 }
 
-export async function setBalance(organizationId: string, data: {
-  employeeId: string;
-  leaveTypeId: string;
-  year: number;
-  entitledDays: number;
-}) {
+export async function setBalance(
+  organizationId: string,
+  data: {
+    employeeId: string;
+    leaveTypeId: string;
+    year: number;
+    entitledDays: number;
+  }
+) {
   await assertOrgRefs(organizationId, { employee: data.employeeId, leaveType: data.leaveTypeId });
   return prisma.leaveBalance.upsert({
     where: {
@@ -318,11 +324,7 @@ export async function employeeHistory(organizationId: string, employeeId: string
   });
 }
 
-export async function departmentCalendar(
-  organizationId: string,
-  departmentId: string,
-  query: CalendarQuery
-) {
+export async function departmentCalendar(organizationId: string, departmentId: string, query: CalendarQuery) {
   await assertOrgRefs(organizationId, { department: departmentId });
   const from = query.from ?? new Date();
   const to = query.to ?? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);

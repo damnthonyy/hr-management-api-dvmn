@@ -1,7 +1,18 @@
 import { type Request, type Response } from "express";
 import * as service from "./department.service";
 import { parseBody, parseQuery } from "../../middleware/validate";
-import { assignEmployeeSchema, assignManagerSchema, createDepartmentSchema, createTeamSchema, listDepartmentsQuery, listTeamsQuery, teamMemberSchema, transferEmployeeSchema, updateDepartmentSchema, updateTeamSchema } from "./department.validation";
+import {
+  assignEmployeeSchema,
+  assignManagerSchema,
+  createDepartmentSchema,
+  createTeamSchema,
+  listDepartmentsQuery,
+  listTeamsQuery,
+  teamMemberSchema,
+  transferEmployeeSchema,
+  updateDepartmentSchema,
+  updateTeamSchema,
+} from "./department.validation";
 import { sendSuccess, sendCreated, sendPaginated, sendNoContent } from "../../utils/response";
 import { requireAuthContext, requireOrgId } from "../../utils/tenant";
 
@@ -35,10 +46,7 @@ export async function remove(req: Request, res: Response): Promise<void> {
 export async function assignManager(req: Request, res: Response): Promise<void> {
   const body = parseBody(req, assignManagerSchema);
   const auth = requireAuthContext(req);
-  sendSuccess(
-    res,
-    await service.assignManager(auth.organizationId, req.params.id, body.managerId, auth.userId)
-  );
+  sendSuccess(res, await service.assignManager(auth.organizationId, req.params.id, body.managerId, auth.userId));
 }
 
 export async function assignEmployee(req: Request, res: Response): Promise<void> {

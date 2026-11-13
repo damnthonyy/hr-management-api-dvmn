@@ -37,12 +37,7 @@ function clientHttpError(err: unknown): { status: number; type?: string } | null
  * Prisma message/meta (table, column and constraint names, query details) or
  * library internals; the details are logged with the request id instead.
  */
-export function errorHandler(
-  err: unknown,
-  req: Request,
-  res: Response,
-  _next: NextFunction
-): void {
+export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {
   const requestId = req.requestId;
 
   if (err instanceof ApiError) {

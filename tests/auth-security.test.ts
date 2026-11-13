@@ -22,13 +22,15 @@ interface Account {
 
 async function register(label: string): Promise<Account> {
   const email = `${label}-${unique}@test.example`;
-  const res = await request(app).post("/api/v1/auth/register").send({
-    organizationName: `Auth ${label} ${unique}`,
-    email,
-    password,
-    firstName: "Auth",
-    lastName: label,
-  });
+  const res = await request(app)
+    .post("/api/v1/auth/register")
+    .send({
+      organizationName: `Auth ${label} ${unique}`,
+      email,
+      password,
+      firstName: "Auth",
+      lastName: label,
+    });
   expect(res.status).toBe(201);
   orgIds.push(res.body.data.organization.id);
   return {
@@ -89,9 +91,13 @@ describe("auth security", () => {
       await prisma.passwordResetToken.create({
         data: { userId: account.userId, tokenHash: sha256(raw), expiresAt: new Date(Date.now() + 60_000) },
       });
-      const first = await request(app).post("/api/v1/auth/reset-password").send({ token: raw, password: "NewPassword123!" });
+      const first = await request(app)
+        .post("/api/v1/auth/reset-password")
+        .send({ token: raw, password: "NewPassword123!" });
       expect(first.status).toBe(200);
-      const replay = await request(app).post("/api/v1/auth/reset-password").send({ token: raw, password: "Other123456!" });
+      const replay = await request(app)
+        .post("/api/v1/auth/reset-password")
+        .send({ token: raw, password: "Other123456!" });
       expect(replay.status).toBe(400);
       // The hash itself is not a valid token.
       const byHash = await request(app)
@@ -164,12 +170,15 @@ describe("auth security", () => {
       const other = await login(account.email);
       expect(other.status).toBe(200);
       const sessions = await request(app).get("/api/v1/auth/sessions").set(bearer(account.accessToken));
-      const target = sessions.body.data.find((session: { id: string }) =>
-        session.id !== JSON.parse(Buffer.from(account.accessToken.split(".")[1], "base64url").toString()).sessionId
+      const target = sessions.body.data.find(
+        (session: { id: string }) =>
+          session.id !== JSON.parse(Buffer.from(account.accessToken.split(".")[1], "base64url").toString()).sessionId
       );
       const res = await request(app).delete(`/api/v1/auth/sessions/${target.id}`).set(bearer(account.accessToken));
       expect(res.status).toBe(200);
-      expect((await request(app).get("/api/v1/auth/me").set(bearer(other.body.data.tokens.accessToken))).status).toBe(401);
+      expect((await request(app).get("/api/v1/auth/me").set(bearer(other.body.data.tokens.accessToken))).status).toBe(
+        401
+      );
       expect((await refresh(other.body.data.tokens.refreshToken)).status).toBe(401);
       expect((await request(app).get("/api/v1/auth/me").set(bearer(account.accessToken))).status).toBe(200);
     });
@@ -196,7 +205,9 @@ describe("auth security", () => {
       for (const token of [account.accessToken, other.body.data.tokens.accessToken]) {
         expect((await request(app).get("/api/v1/auth/me").set(bearer(token))).status).toBe(401);
       }
-      expect((await request(app).post("/api/v1/auth/refresh").send({ refreshToken: account.refreshToken })).status).toBe(401);
+      expect(
+        (await request(app).post("/api/v1/auth/refresh").send({ refreshToken: account.refreshToken })).status
+      ).toBe(401);
       expect((await login(account.email, "Reset123456!")).status).toBe(200);
     });
 
@@ -209,32 +220,38 @@ describe("auth security", () => {
         .send({ currentPassword: password, newPassword: "Changed123456!" });
       expect(res.status).toBe(200);
       expect((await request(app).get("/api/v1/auth/me").set(bearer(account.accessToken))).status).toBe(200);
-      expect((await request(app).get("/api/v1/auth/me").set(bearer(other.body.data.tokens.accessToken))).status).toBe(401);
+      expect((await request(app).get("/api/v1/auth/me").set(bearer(other.body.data.tokens.accessToken))).status).toBe(
+        401
+      );
     });
   });
 
   describe("login hardening", () => {
     it("treats emails case-insensitively and keeps them globally unique", async () => {
       const email = `Mixed.Case-${unique}@Test.Example`;
-      const res = await request(app).post("/api/v1/auth/register").send({
-        organizationName: `Case ${unique}`,
-        email: `  ${email} `,
-        password,
-        firstName: "Case",
-        lastName: "Test",
-      });
+      const res = await request(app)
+        .post("/api/v1/auth/register")
+        .send({
+          organizationName: `Case ${unique}`,
+          email: `  ${email} `,
+          password,
+          firstName: "Case",
+          lastName: "Test",
+        });
       expect(res.status).toBe(201);
       orgIds.push(res.body.data.organization.id);
       expect(res.body.data.user.email).toBe(email.toLowerCase());
       expect((await login(email.toUpperCase())).status).toBe(200);
 
-      const duplicate = await request(app).post("/api/v1/auth/register").send({
-        organizationName: `Case dup ${unique}`,
-        email: email.toLowerCase(),
-        password,
-        firstName: "Case",
-        lastName: "Dup",
-      });
+      const duplicate = await request(app)
+        .post("/api/v1/auth/register")
+        .send({
+          organizationName: `Case dup ${unique}`,
+          email: email.toLowerCase(),
+          password,
+          firstName: "Case",
+          lastName: "Dup",
+        });
       expect(duplicate.status).toBe(409);
     });
 
@@ -380,14 +397,19 @@ describe("auth security", () => {
       expect(res.status).toBe(200);
       expect(res.body.data.email).toBe(newEmail);
       expect(res.body.data.emailVerified).toBe(false);
-      const reset = await request(app).post("/api/v1/auth/reset-password").send({ token: raw, password: "Whatever123!" });
+      const reset = await request(app)
+        .post("/api/v1/auth/reset-password")
+        .send({ token: raw, password: "Whatever123!" });
       expect(reset.status).toBe(400);
       expect(await prisma.emailVerificationToken.count({ where: { userId: account.userId, usedAt: null } })).toBe(1);
     });
 
     it("still allows name changes without a password", async () => {
       const account = await register("email-name");
-      const res = await request(app).patch("/api/v1/auth/me").set(bearer(account.accessToken)).send({ firstName: "Renamed" });
+      const res = await request(app)
+        .patch("/api/v1/auth/me")
+        .set(bearer(account.accessToken))
+        .send({ firstName: "Renamed" });
       expect(res.status).toBe(200);
       expect(res.body.data.firstName).toBe("Renamed");
     });

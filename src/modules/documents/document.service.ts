@@ -4,7 +4,14 @@ import crypto from "crypto";
 import { type Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
-import { fileExists, removeFile, resolveStoragePath, sanitizeFileName, sha256File, uploadsDir } from "../../lib/storage";
+import {
+  fileExists,
+  removeFile,
+  resolveStoragePath,
+  sanitizeFileName,
+  sha256File,
+  uploadsDir,
+} from "../../lib/storage";
 import { randomToken } from "../../utils/tokens";
 import { recordAudit } from "../../services/audit.service";
 import { enqueueDocumentProcessing } from "../../queues";
@@ -48,11 +55,15 @@ export async function getDocument(organizationId: string, id: string) {
   return document;
 }
 
-export async function saveUploadedDocument(organizationId: string, file: UploadedFile, meta: {
-  employeeId?: string;
-  categoryId?: string;
-  uploadedById: string;
-}) {
+export async function saveUploadedDocument(
+  organizationId: string,
+  file: UploadedFile,
+  meta: {
+    employeeId?: string;
+    categoryId?: string;
+    uploadedById: string;
+  }
+) {
   try {
     // The declared MIME type is client controlled: check the content.
     if (!contentMatchesType(file.mimetype, await readHead(file.path))) {
@@ -91,12 +102,16 @@ export async function saveUploadedDocument(organizationId: string, file: Uploade
   return document;
 }
 
-export async function importFromUrl(organizationId: string, data: {
-  url: string;
-  employeeId?: string;
-  categoryId?: string;
-  fileName?: string;
-}, uploadedById: string) {
+export async function importFromUrl(
+  organizationId: string,
+  data: {
+    url: string;
+    employeeId?: string;
+    categoryId?: string;
+    fileName?: string;
+  },
+  uploadedById: string
+) {
   await assertOrgRefs(organizationId, { employee: data.employeeId, documentCategory: data.categoryId });
 
   let remote;
@@ -210,4 +225,3 @@ async function readHead(filePath: string): Promise<Buffer> {
     await handle.close();
   }
 }
-

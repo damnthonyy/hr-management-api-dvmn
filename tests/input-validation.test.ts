@@ -13,13 +13,15 @@ const auth = () => ({ Authorization: `Bearer ${token}` });
 
 describe("input validation", () => {
   beforeAll(async () => {
-    const res = await request(app).post("/api/v1/auth/register").send({
-      organizationName: `Validation ${unique}`,
-      email: `validation-${unique}@test.example`,
-      password: "Password123!",
-      firstName: "Val",
-      lastName: "Admin",
-    });
+    const res = await request(app)
+      .post("/api/v1/auth/register")
+      .send({
+        organizationName: `Validation ${unique}`,
+        email: `validation-${unique}@test.example`,
+        password: "Password123!",
+        firstName: "Val",
+        lastName: "Admin",
+      });
     expect(res.status).toBe(201);
     orgId = res.body.data.organization.id;
     token = res.body.data.tokens.accessToken;

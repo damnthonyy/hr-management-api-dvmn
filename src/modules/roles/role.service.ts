@@ -1,12 +1,7 @@
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { type SystemRole } from "@prisma/client";
-import {
-  ALL_PERMISSIONS,
-  canGrantSystemRole,
-  isKnownPermission,
-  missingPermissions,
-} from "../../config/permissions";
+import { ALL_PERMISSIONS, canGrantSystemRole, isKnownPermission, missingPermissions } from "../../config/permissions";
 import type { AuthContext } from "../../types/express";
 import { recordAudit } from "../../services/audit.service";
 import { assertOrgRefs } from "../../utils/tenant";
@@ -57,11 +52,14 @@ export async function listRoles(organizationId: string) {
   });
 }
 
-export async function createRole(auth: AuthContext, data: {
-  name: string;
-  description?: string;
-  permissions: string[];
-}) {
+export async function createRole(
+  auth: AuthContext,
+  data: {
+    name: string;
+    description?: string;
+    permissions: string[];
+  }
+) {
   const { organizationId, userId: actorId } = auth;
   assertGrantablePermissions(auth, data.permissions);
   const permissions = await prisma.permission.findMany({ where: { key: { in: data.permissions } } });
@@ -84,11 +82,15 @@ export async function createRole(auth: AuthContext, data: {
   return role;
 }
 
-export async function updateRole(auth: AuthContext, id: string, data: {
-  name?: string;
-  description?: string;
-  permissions?: string[];
-}) {
+export async function updateRole(
+  auth: AuthContext,
+  id: string,
+  data: {
+    name?: string;
+    description?: string;
+    permissions?: string[];
+  }
+) {
   const { organizationId, userId: actorId } = auth;
   const existing = await findRoleInOrg(organizationId, id);
   assertGrantablePermissions(auth, await rolePermissionKeys(id));
@@ -136,11 +138,14 @@ export async function deleteRole(auth: AuthContext, id: string) {
   return { ok: true };
 }
 
-export async function assignRole(auth: AuthContext, data: {
-  userId: string;
-  roleId: string;
-  departmentId?: string;
-}) {
+export async function assignRole(
+  auth: AuthContext,
+  data: {
+    userId: string;
+    roleId: string;
+    departmentId?: string;
+  }
+) {
   const { organizationId, userId: actorId } = auth;
   await assertOrgRefs(organizationId, { user: data.userId, role: data.roleId, department: data.departmentId });
   assertGrantablePermissions(auth, await rolePermissionKeys(data.roleId));

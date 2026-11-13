@@ -15,4 +15,6 @@ export const uuidFilter = z.uuid().optional();
 export const searchFilter = z.string().trim().max(100).optional();
 
 /** ISO date or datetime, as accepted by `new Date()`; rejects "Invalid Date". */
-export const dateFilter = z.union([z.iso.date(), z.iso.datetime({ offset: true })]).transform((value) => new Date(value));
+export const dateFilter = z
+  .union([z.iso.date(), z.iso.datetime({ offset: true })])
+  .transform((value) => new Date(value));

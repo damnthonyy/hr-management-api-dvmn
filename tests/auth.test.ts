@@ -27,13 +27,15 @@ describe("authentication flow", () => {
   });
 
   it("registers a new organization and admin", async () => {
-    const res = await request(app).post("/api/v1/auth/register").send({
-      organizationName: `Test Org ${unique}`,
-      email,
-      password,
-      firstName: "Test",
-      lastName: "Founder",
-    });
+    const res = await request(app)
+      .post("/api/v1/auth/register")
+      .send({
+        organizationName: `Test Org ${unique}`,
+        email,
+        password,
+        firstName: "Test",
+        lastName: "Founder",
+      });
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
     expect(res.body.data.tokens.accessToken).toBeTruthy();

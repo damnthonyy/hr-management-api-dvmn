@@ -32,13 +32,15 @@ const strong = { JWT_ACCESS_SECRET: "a".repeat(40), JWT_REFRESH_SECRET: "b".repe
 describe("HTTP hardening", () => {
   beforeAll(async () => {
     email = `http-${unique}@test.example`;
-    const res = await request(app).post("/api/v1/auth/register").send({
-      organizationName: `Http ${unique}`,
-      email,
-      password,
-      firstName: "Http",
-      lastName: "Admin",
-    });
+    const res = await request(app)
+      .post("/api/v1/auth/register")
+      .send({
+        organizationName: `Http ${unique}`,
+        email,
+        password,
+        firstName: "Http",
+        lastName: "Admin",
+      });
     expect(res.status).toBe(201);
     orgId = res.body.data.organization.id;
     token = res.body.data.tokens.accessToken;
@@ -85,7 +87,12 @@ describe("HTTP hardening", () => {
     });
 
     it("defaults to no cross-origin access in production, and honours an explicit list", async () => {
-      const prod = await loadEnvWith({ NODE_ENV: "production", RATE_LIMIT_ENABLED: undefined, CORS_ORIGIN: undefined, ...strong });
+      const prod = await loadEnvWith({
+        NODE_ENV: "production",
+        RATE_LIMIT_ENABLED: undefined,
+        CORS_ORIGIN: undefined,
+        ...strong,
+      });
       expect(prod.env.corsOrigins).toEqual([]);
       const list = await loadEnvWith({ CORS_ORIGIN: "https://app.example/, https://admin.example" });
       expect(list.env.corsOrigins).toEqual(["https://app.example", "https://admin.example"]);
@@ -158,21 +165,22 @@ describe("HTTP hardening", () => {
         const res = await request(app).post("/api/v1/auth/forgot-password").send({ email: target });
         expect(res.status).toBe(200);
       }
-      const blocked = await request(app).post("/api/v1/auth/forgot-password").send({ email: ` ${target.toUpperCase()} ` });
+      const blocked = await request(app)
+        .post("/api/v1/auth/forgot-password")
+        .send({ email: ` ${target.toUpperCase()} ` });
       expect(blocked.status).toBe(429);
       expect(Number(blocked.headers["retry-after"])).toBeGreaterThan(0);
       // Other accounts are not affected.
-      const other = await request(app).post("/api/v1/auth/forgot-password").send({ email: `other-${unique}@test.example` });
+      const other = await request(app)
+        .post("/api/v1/auth/forgot-password")
+        .send({ email: `other-${unique}@test.example` });
       expect(other.status).toBe(200);
     });
 
     it("cannot be bypassed by rotating X-Forwarded-For", async () => {
       const statuses: number[] = [];
       for (let i = 0; i < 11; i += 1) {
-        const res = await request(app)
-          .post("/api/v1/auth/register")
-          .set("X-Forwarded-For", `203.0.113.${i}`)
-          .send({});
+        const res = await request(app).post("/api/v1/auth/register").set("X-Forwarded-For", `203.0.113.${i}`).send({});
         statuses.push(res.status);
       }
       expect(statuses.slice(0, 10).every((status) => status === 400)).toBe(true);
@@ -181,7 +189,9 @@ describe("HTTP hardening", () => {
 
     it("limits refresh and login per account", async () => {
       for (let i = 0; i < 10; i += 1) {
-        await request(app).post("/api/v1/auth/login").send({ email: `nobody-${unique}@test.example`, password: "wrong" });
+        await request(app)
+          .post("/api/v1/auth/login")
+          .send({ email: `nobody-${unique}@test.example`, password: "wrong" });
       }
       const login = await request(app)
         .post("/api/v1/auth/login")
@@ -204,7 +214,9 @@ describe("HTTP hardening", () => {
     it("fails open quickly when Redis does not answer", async () => {
       vi.spyOn(getRedis(), "eval").mockReturnValue(new Promise(() => undefined));
       const started = Date.now();
-      const res = await request(app).post("/api/v1/auth/forgot-password").send({ email: `slow-${unique}@test.example` });
+      const res = await request(app)
+        .post("/api/v1/auth/forgot-password")
+        .send({ email: `slow-${unique}@test.example` });
       expect(res.status).toBe(200);
       expect(Date.now() - started).toBeLessThan(5000);
     });
@@ -216,7 +228,7 @@ describe("HTTP hardening", () => {
       expect(res.headers["x-request-id"]).toBe("edge-1234.abcd:5");
     });
 
-    it.each(["fake\" level=error msg=\"admin logged in", "a".repeat(200), "<script>"])(
+    it.each(['fake" level=error msg="admin logged in', "a".repeat(200), "<script>"])(
       "replaces a malformed X-Request-Id (%s)",
       async (value) => {
         const res = await request(app).get("/health").set("X-Request-Id", value);
@@ -247,9 +259,7 @@ describe("HTTP hardening", () => {
     });
 
     it("paginates the document list", async () => {
-      const res = await request(app)
-        .get("/api/v1/documents?pageSize=5")
-        .set("Authorization", `Bearer ${token}`);
+      const res = await request(app).get("/api/v1/documents?pageSize=5").set("Authorization", `Bearer ${token}`);
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body.data)).toBe(true);
       expect(res.body.meta).toMatchObject({ page: 1, pageSize: 5 });
@@ -265,7 +275,10 @@ describe("HTTP hardening", () => {
 
     it("lists only active sessions", async () => {
       const other = await request(app).post("/api/v1/auth/login").send({ email, password });
-      await request(app).post("/api/v1/auth/logout").set("Authorization", `Bearer ${other.body.data.tokens.accessToken}`).send({});
+      await request(app)
+        .post("/api/v1/auth/logout")
+        .set("Authorization", `Bearer ${other.body.data.tokens.accessToken}`)
+        .send({});
       const res = await request(app).get("/api/v1/auth/sessions").set("Authorization", `Bearer ${token}`);
       expect(res.status).toBe(200);
       expect(res.body.data.every((session: { revokedAt: string | null }) => session.revokedAt === null)).toBe(true);

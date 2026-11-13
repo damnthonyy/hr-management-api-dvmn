@@ -29,13 +29,15 @@ const importUrl = (body: Record<string, unknown>) =>
 
 describe("document import", () => {
   beforeAll(async () => {
-    const res = await request(app).post("/api/v1/auth/register").send({
-      organizationName: `Import ${unique}`,
-      email: `import-${unique}@test.example`,
-      password: "Password123!",
-      firstName: "Import",
-      lastName: "Admin",
-    });
+    const res = await request(app)
+      .post("/api/v1/auth/register")
+      .send({
+        organizationName: `Import ${unique}`,
+        email: `import-${unique}@test.example`,
+        password: "Password123!",
+        firstName: "Import",
+        lastName: "Admin",
+      });
     orgId = res.body.data.organization.id;
     token = res.body.data.tokens.accessToken;
   });

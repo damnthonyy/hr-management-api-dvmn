@@ -56,7 +56,10 @@ const trustProxy = optional(z.string().trim()).transform((raw, ctx): false | num
     return z.NEVER;
   }
   if (/^\d+$/.test(raw)) return Number.parseInt(raw, 10);
-  return raw.split(",").map((entry) => entry.trim()).filter(Boolean);
+  return raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 });
 
 /**
@@ -68,7 +71,10 @@ const trustProxy = optional(z.string().trim()).transform((raw, ctx): false | num
 const corsOrigins = optional(z.string().trim()).transform((raw, ctx): "*" | string[] => {
   if (!raw) return isProduction ? [] : "*";
   if (raw === "*") return "*";
-  const origins = raw.split(",").map((entry) => entry.trim().replace(/\/$/, "")).filter(Boolean);
+  const origins = raw
+    .split(",")
+    .map((entry) => entry.trim().replace(/\/$/, ""))
+    .filter(Boolean);
   for (const origin of origins) {
     if (!z.url({ protocol: /^https?$/ }).safeParse(origin).success) {
       ctx.addIssue({ code: "custom", message: `CORS_ORIGIN contains an invalid origin: ${origin}` });
@@ -110,7 +116,11 @@ const schema = z
       });
     }
     if (value.NODE_ENV === "production" && value.RATE_LIMIT_ENABLED === false) {
-      ctx.addIssue({ code: "custom", path: ["RATE_LIMIT_ENABLED"], message: "rate limiting cannot be disabled in production" });
+      ctx.addIssue({
+        code: "custom",
+        path: ["RATE_LIMIT_ENABLED"],
+        message: "rate limiting cannot be disabled in production",
+      });
     }
   });
 

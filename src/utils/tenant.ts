@@ -46,12 +46,9 @@ const counters = {
     prisma.employee.count({ where: { id: { in: ids }, organizationId } }),
   department: (ids: string[], organizationId: string) =>
     prisma.department.count({ where: { id: { in: ids }, organizationId } }),
-  team: (ids: string[], organizationId: string) =>
-    prisma.team.count({ where: { id: { in: ids }, organizationId } }),
-  user: (ids: string[], organizationId: string) =>
-    prisma.user.count({ where: { id: { in: ids }, organizationId } }),
-  role: (ids: string[], organizationId: string) =>
-    prisma.role.count({ where: { id: { in: ids }, organizationId } }),
+  team: (ids: string[], organizationId: string) => prisma.team.count({ where: { id: { in: ids }, organizationId } }),
+  user: (ids: string[], organizationId: string) => prisma.user.count({ where: { id: { in: ids }, organizationId } }),
+  role: (ids: string[], organizationId: string) => prisma.role.count({ where: { id: { in: ids }, organizationId } }),
   leaveType: (ids: string[], organizationId: string) =>
     prisma.leaveType.count({ where: { id: { in: ids }, organizationId } }),
   documentCategory: (ids: string[], organizationId: string) =>
@@ -69,10 +66,7 @@ export type TenantRefKind = keyof typeof counters;
  *
  * Throws 404 when a reference is missing or belongs to another tenant.
  */
-export async function assertOrgRefs(
-  organizationId: string,
-  refs: Partial<Record<TenantRefKind, Ids>>
-): Promise<void> {
+export async function assertOrgRefs(organizationId: string, refs: Partial<Record<TenantRefKind, Ids>>): Promise<void> {
   for (const [kind, value] of Object.entries(refs) as [TenantRefKind, Ids][]) {
     const list = (Array.isArray(value) ? value : [value]).filter(
       (id): id is string => typeof id === "string" && id.length > 0

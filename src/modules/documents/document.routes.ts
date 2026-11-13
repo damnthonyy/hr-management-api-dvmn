@@ -15,7 +15,12 @@ router.get("/categories", requirePermission(PERMISSIONS.DOCUMENT_VIEW), asyncHan
 router.post("/categories", requirePermission(PERMISSIONS.DOCUMENT_MANAGE), asyncHandler(controller.createCategory));
 
 router.get("/", requirePermission(PERMISSIONS.DOCUMENT_VIEW), asyncHandler(controller.list));
-router.post("/upload", requirePermission(PERMISSIONS.DOCUMENT_MANAGE), upload.single("file"), asyncHandler(controller.uploadDocument));
+router.post(
+  "/upload",
+  requirePermission(PERMISSIONS.DOCUMENT_MANAGE),
+  upload.single("file"),
+  asyncHandler(controller.uploadDocument)
+);
 router.post("/import-from-url", requirePermission(PERMISSIONS.DOCUMENT_MANAGE), asyncHandler(controller.importFromUrl));
 router.get("/:id", requirePermission(PERMISSIONS.DOCUMENT_VIEW), asyncHandler(controller.getOne));
 router.get("/:id/download", requirePermission(PERMISSIONS.DOCUMENT_VIEW), asyncHandler(controller.download));

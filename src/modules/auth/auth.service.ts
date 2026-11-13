@@ -4,11 +4,7 @@ import { env } from "../../config/env";
 import { ApiError } from "../../utils/apiError";
 import { hashPassword, verifyPassword } from "../../utils/password";
 import { randomToken, sha256 } from "../../utils/tokens";
-import {
-  signAccessToken,
-  signRefreshToken,
-  verifyRefreshToken,
-} from "../../utils/jwt";
+import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../../utils/jwt";
 import { randomUUID } from "crypto";
 import { slugify } from "../../utils/slug";
 import { recordAudit } from "../../services/audit.service";
@@ -106,13 +102,16 @@ async function sendEmailVerification(user: Pick<User, "id" | "email" | "firstNam
   });
 }
 
-export async function register(input: {
-  organizationName: string;
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-}, meta: RequestMeta) {
+export async function register(
+  input: {
+    organizationName: string;
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+  },
+  meta: RequestMeta
+) {
   const existing = await prisma.user.findUnique({ where: { email: input.email } });
   if (existing) {
     throw ApiError.conflict("An account with this email already exists");

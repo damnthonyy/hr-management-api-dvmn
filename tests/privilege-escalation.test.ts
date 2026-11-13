@@ -64,13 +64,15 @@ describe("privilege escalation", () => {
       skipDuplicates: true,
     });
 
-    const res = await request(app).post("/api/v1/auth/register").send({
-      organizationName: `Priv Org ${unique}`,
-      email: `owner-${unique}@test.example`,
-      password,
-      firstName: "Owner",
-      lastName: "Admin",
-    });
+    const res = await request(app)
+      .post("/api/v1/auth/register")
+      .send({
+        organizationName: `Priv Org ${unique}`,
+        email: `owner-${unique}@test.example`,
+        password,
+        firstName: "Owner",
+        lastName: "Admin",
+      });
     expect(res.status).toBe(201);
     orgId = res.body.data.organization.id;
     admin = { id: res.body.data.user.id, token: res.body.data.tokens.accessToken };
@@ -327,7 +329,9 @@ describe("privilege escalation", () => {
     });
 
     it("an employee cannot cancel a colleague's request", async () => {
-      const res = await request(app).post(`/api/v1/leave/requests/${requests.colleague}/cancel`).set(bearer(users.worker.token));
+      const res = await request(app)
+        .post(`/api/v1/leave/requests/${requests.colleague}/cancel`)
+        .set(bearer(users.worker.token));
       expect(res.status).toBe(403);
     });
 
@@ -348,9 +352,13 @@ describe("privilege escalation", () => {
     });
 
     it("an employee can cancel their own request, but only once", async () => {
-      const first = await request(app).post(`/api/v1/leave/requests/${requests.worker}/cancel`).set(bearer(users.worker.token));
+      const first = await request(app)
+        .post(`/api/v1/leave/requests/${requests.worker}/cancel`)
+        .set(bearer(users.worker.token));
       expect(first.status).toBe(200);
-      const second = await request(app).post(`/api/v1/leave/requests/${requests.worker}/cancel`).set(bearer(users.worker.token));
+      const second = await request(app)
+        .post(`/api/v1/leave/requests/${requests.worker}/cancel`)
+        .set(bearer(users.worker.token));
       expect(second.status).toBe(400);
     });
 

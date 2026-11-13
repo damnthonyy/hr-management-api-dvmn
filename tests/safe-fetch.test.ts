@@ -72,8 +72,8 @@ describe("SSRF guard", () => {
       callback(null, [{ address: "169.254.169.254", family: 4 }]);
     }) as unknown as typeof dns.lookup);
 
-    await expect(fetchRemoteFile("https://rebind.attacker.example/latest/meta-data/", { maxBytes: 1024 })).rejects.toThrow(
-      UnsafeUrlError
-    );
+    await expect(
+      fetchRemoteFile("https://rebind.attacker.example/latest/meta-data/", { maxBytes: 1024 })
+    ).rejects.toThrow(UnsafeUrlError);
   });
 });

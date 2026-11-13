@@ -28,14 +28,17 @@ export async function listOrganizations(query: ListOrganizationsQuery) {
   return { items, meta: buildMeta(params, total) };
 }
 
-export async function createOrganization(data: {
-  name: string;
-  legalName?: string;
-  domain?: string;
-  timezone?: string;
-  currency?: string;
-  employeeLimit?: number;
-}, actorId: string) {
+export async function createOrganization(
+  data: {
+    name: string;
+    legalName?: string;
+    domain?: string;
+    timezone?: string;
+    currency?: string;
+    employeeLimit?: number;
+  },
+  actorId: string
+) {
   const slug = `${slugify(data.name)}-${randomToken(3)}`;
   const organization = await prisma.organization.create({
     data: {
@@ -130,16 +133,28 @@ export async function updateSubscription(id: string, data: UpdateSubscriptionInp
 export async function listAdmins(id: string) {
   return prisma.user.findMany({
     where: { organizationId: id, systemRole: { in: [SystemRole.ORGANIZATION_ADMIN, SystemRole.SUPER_ADMIN] } },
-    select: { id: true, email: true, firstName: true, lastName: true, systemRole: true, isActive: true, lastLoginAt: true },
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      systemRole: true,
+      isActive: true,
+      lastLoginAt: true,
+    },
   });
 }
 
-export async function addAdmin(id: string, data: {
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-}, actorId: string) {
+export async function addAdmin(
+  id: string,
+  data: {
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+  },
+  actorId: string
+) {
   const passwordHash = await hashPassword(data.password);
   const user = await prisma.user.create({
     data: {

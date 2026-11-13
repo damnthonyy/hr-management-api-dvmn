@@ -21,13 +21,15 @@ const upload = () => request(app).post("/api/v1/documents/upload").set("Authoriz
 describe("document security", () => {
   beforeAll(async () => {
     ensureStorage();
-    const res = await request(app).post("/api/v1/auth/register").send({
-      organizationName: `Docs ${unique}`,
-      email: `docs-${unique}@test.example`,
-      password: "Password123!",
-      firstName: "Doc",
-      lastName: "Admin",
-    });
+    const res = await request(app)
+      .post("/api/v1/auth/register")
+      .send({
+        organizationName: `Docs ${unique}`,
+        email: `docs-${unique}@test.example`,
+        password: "Password123!",
+        firstName: "Doc",
+        lastName: "Admin",
+      });
     expect(res.status).toBe(201);
     orgId = res.body.data.organization.id;
     token = res.body.data.tokens.accessToken;

@@ -74,12 +74,16 @@ export async function listPeriods(organizationId: string, query: ListPayrollQuer
   return { items, meta: buildMeta(params, total) };
 }
 
-export async function createPeriod(organizationId: string, data: {
-  label: string;
-  periodStart: string;
-  periodEnd: string;
-  payDate: string;
-}, actorId: string) {
+export async function createPeriod(
+  organizationId: string,
+  data: {
+    label: string;
+    periodStart: string;
+    periodEnd: string;
+    payDate: string;
+  },
+  actorId: string
+) {
   const period = await prisma.payrollPeriod.create({
     data: {
       organizationId,

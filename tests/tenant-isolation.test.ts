@@ -26,13 +26,15 @@ interface Tenant {
 
 async function registerTenant(label: string): Promise<Tenant> {
   const name = `Tenant ${label} ${unique}`;
-  const res = await request(app).post("/api/v1/auth/register").send({
-    organizationName: name,
-    email: `admin-${label}-${unique}@test.example`,
-    password,
-    firstName: "Admin",
-    lastName: label,
-  });
+  const res = await request(app)
+    .post("/api/v1/auth/register")
+    .send({
+      organizationName: name,
+      email: `admin-${label}-${unique}@test.example`,
+      password,
+      firstName: "Admin",
+      lastName: label,
+    });
   expect(res.status).toBe(201);
   return {
     orgId: res.body.data.organization.id,
@@ -125,7 +127,13 @@ describe("multi-tenant isolation", () => {
     });
     victim.cycleId = cycle.id;
     const review = await prisma.performanceReview.create({
-      data: { cycleId: cycle.id, employeeId: employee.id, authorId: b.userId, summary: "secret review", status: "DRAFT" },
+      data: {
+        cycleId: cycle.id,
+        employeeId: employee.id,
+        authorId: b.userId,
+        summary: "secret review",
+        status: "DRAFT",
+      },
     });
     victim.reviewId = review.id;
     const objective = await prisma.objective.create({
@@ -273,12 +281,28 @@ describe("multi-tenant isolation", () => {
       ["GET", (): string => `/api/v1/departments/${victim.departmentId}`, undefined],
       ["PATCH", (): string => `/api/v1/departments/${victim.departmentId}`, { name: "Hacked" }],
       ["DELETE", (): string => `/api/v1/departments/${victim.departmentId}`, undefined],
-      ["PUT", (): string => `/api/v1/departments/${victim.departmentId}/manager`, (): object => ({ managerId: victim.employeeId })],
-      ["POST", (): string => `/api/v1/departments/${victim.departmentId}/employees`, (): object => ({ employeeId: victim.employeeId })],
-      ["POST", (): string => "/api/v1/departments/transfer", (): object => ({ employeeId: victim.employeeId, targetDepartmentId: victim.departmentId })],
+      [
+        "PUT",
+        (): string => `/api/v1/departments/${victim.departmentId}/manager`,
+        (): object => ({ managerId: victim.employeeId }),
+      ],
+      [
+        "POST",
+        (): string => `/api/v1/departments/${victim.departmentId}/employees`,
+        (): object => ({ employeeId: victim.employeeId }),
+      ],
+      [
+        "POST",
+        (): string => "/api/v1/departments/transfer",
+        (): object => ({ employeeId: victim.employeeId, targetDepartmentId: victim.departmentId }),
+      ],
       ["PATCH", (): string => `/api/v1/departments/teams/${victim.teamId}`, { name: "Hacked" }],
       ["DELETE", (): string => `/api/v1/departments/teams/${victim.teamId}`, undefined],
-      ["POST", (): string => `/api/v1/departments/teams/${victim.teamId}/members`, (): object => ({ employeeId: victim.employeeId })],
+      [
+        "POST",
+        (): string => `/api/v1/departments/teams/${victim.teamId}/members`,
+        (): object => ({ employeeId: victim.employeeId }),
+      ],
       ["DELETE", (): string => `/api/v1/departments/teams/members/${victim.employeeId}`, undefined],
     ] as const)("%s %s returns 404", async (method, url, body) => {
       const req = request(app)[method.toLowerCase() as "get" | "post" | "put" | "patch" | "delete"](url()).set(asA());
@@ -313,8 +337,26 @@ describe("multi-tenant isolation", () => {
       ["GET", (): string => `/api/v1/leave/balances/${victim.employeeId}`, undefined],
       ["GET", (): string => `/api/v1/leave/history/${victim.employeeId}`, undefined],
       ["GET", (): string => `/api/v1/leave/calendar/${victim.departmentId}`, undefined],
-      ["PUT", (): string => "/api/v1/leave/balances", (): object => ({ employeeId: victim.employeeId, leaveTypeId: victim.leaveTypeId, year: 2026, entitledDays: 999 })],
-      ["POST", (): string => "/api/v1/leave/requests", (): object => ({ employeeId: victim.employeeId, leaveTypeId: victim.leaveTypeId, startDate: today(), endDate: today() })],
+      [
+        "PUT",
+        (): string => "/api/v1/leave/balances",
+        (): object => ({
+          employeeId: victim.employeeId,
+          leaveTypeId: victim.leaveTypeId,
+          year: 2026,
+          entitledDays: 999,
+        }),
+      ],
+      [
+        "POST",
+        (): string => "/api/v1/leave/requests",
+        (): object => ({
+          employeeId: victim.employeeId,
+          leaveTypeId: victim.leaveTypeId,
+          startDate: today(),
+          endDate: today(),
+        }),
+      ],
     ] as const)("%s %s returns 404", async (method, url, body) => {
       const req = request(app)[method.toLowerCase() as "get" | "post" | "put"](url()).set(asA());
       const payload = typeof body === "function" ? body() : body;
@@ -339,8 +381,16 @@ describe("multi-tenant isolation", () => {
       ["POST", (): string => `/api/v1/payroll/periods/${victim.periodId}/approve`, {}],
       ["POST", (): string => `/api/v1/payroll/periods/${victim.periodId}/pay`, {}],
       ["GET", (): string => `/api/v1/payroll/records/${victim.payrollRecordId}`, undefined],
-      ["POST", (): string => `/api/v1/payroll/records/${victim.payrollRecordId}/bonuses`, { label: "x", amount: 1000000 }],
-      ["POST", (): string => `/api/v1/payroll/records/${victim.payrollRecordId}/deductions`, { label: "x", amount: 1000000 }],
+      [
+        "POST",
+        (): string => `/api/v1/payroll/records/${victim.payrollRecordId}/bonuses`,
+        { label: "x", amount: 1000000 },
+      ],
+      [
+        "POST",
+        (): string => `/api/v1/payroll/records/${victim.payrollRecordId}/deductions`,
+        { label: "x", amount: 1000000 },
+      ],
     ] as const)("%s %s returns 404", async (method, url, body) => {
       const req = request(app)[method.toLowerCase() as "get" | "post"](url()).set(asA());
       const res = await (body ? req.send(body) : req);
@@ -365,10 +415,22 @@ describe("multi-tenant isolation", () => {
     it.each([
       ["GET", (): string => `/api/v1/performance/reviews/${victim.reviewId}`, undefined],
       ["PATCH", (): string => `/api/v1/performance/reviews/${victim.reviewId}`, (): object => ({ summary: "Hacked" })],
-      ["POST", (): string => "/api/v1/performance/reviews", (): object => ({ cycleId: victim.cycleId, employeeId: victim.employeeId })],
+      [
+        "POST",
+        (): string => "/api/v1/performance/reviews",
+        (): object => ({ cycleId: victim.cycleId, employeeId: victim.employeeId }),
+      ],
       ["GET", (): string => `/api/v1/performance/objectives/${victim.employeeId}`, undefined],
-      ["POST", (): string => "/api/v1/performance/objectives", (): object => ({ employeeId: victim.employeeId, title: "Injected" })],
-      ["PATCH", (): string => `/api/v1/performance/objectives/${victim.objectiveId}`, (): object => ({ title: "Hacked" })],
+      [
+        "POST",
+        (): string => "/api/v1/performance/objectives",
+        (): object => ({ employeeId: victim.employeeId, title: "Injected" }),
+      ],
+      [
+        "PATCH",
+        (): string => `/api/v1/performance/objectives/${victim.objectiveId}`,
+        (): object => ({ title: "Hacked" }),
+      ],
       ["DELETE", (): string => `/api/v1/performance/objectives/${victim.objectiveId}`, undefined],
     ] as const)("%s %s returns 404", async (method, url, body) => {
       const req = request(app)[method.toLowerCase() as "get" | "post" | "patch" | "delete"](url()).set(asA());
@@ -409,7 +471,10 @@ describe("multi-tenant isolation", () => {
 
     it("cannot assign one of its own roles to another org's user", async () => {
       const own = await prisma.role.create({ data: { organizationId: a.orgId, name: `Own role ${unique}` } });
-      const res = await request(app).post("/api/v1/roles/assignments").set(asA()).send({ userId: b.userId, roleId: own.id });
+      const res = await request(app)
+        .post("/api/v1/roles/assignments")
+        .set(asA())
+        .send({ userId: b.userId, roleId: own.id });
       expect(res.status).toBe(404);
     });
 
@@ -440,7 +505,9 @@ describe("multi-tenant isolation", () => {
       ["GET", "/admins", undefined],
       ["POST", "/admins", { email: `backdoor-${unique}@test.example`, password, firstName: "Back", lastName: "Door" }],
     ] as const)("%s /organizations/:id%s returns 404", async (method, suffix, body) => {
-      const req = request(app)[method.toLowerCase() as "get" | "post" | "put" | "patch"](`/api/v1/organizations/${b.orgId}${suffix}`).set(asA());
+      const req = request(app)
+        [method.toLowerCase() as "get" | "post" | "put" | "patch"](`/api/v1/organizations/${b.orgId}${suffix}`)
+        .set(asA());
       const res = await (body ? req.send(body) : req);
       expect(res.status).toBe(404);
     });

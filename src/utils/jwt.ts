@@ -34,7 +34,7 @@ function decode(token: string, secret: string): Record<string, unknown> {
 }
 
 function hasStrings(value: Record<string, unknown>, keys: string[]): boolean {
-  return keys.every((key) => typeof value[key] === "string" && (value[key]).length > 0);
+  return keys.every((key) => typeof value[key] === "string" && value[key].length > 0);
 }
 
 export function signAccessToken(payload: Omit<AccessTokenPayload, "type">): string {
@@ -53,10 +53,7 @@ export function signRefreshToken(payload: Omit<RefreshTokenPayload, "type">): st
 
 export function verifyAccessToken(token: string): AccessTokenPayload {
   const payload = decode(token, env.jwt.accessSecret);
-  if (
-    payload.type !== "access" ||
-    !hasStrings(payload, ["sub", "organizationId", "sessionId"])
-  ) {
+  if (payload.type !== "access" || !hasStrings(payload, ["sub", "organizationId", "sessionId"])) {
     throw new jwt.JsonWebTokenError("invalid access token");
   }
   return payload as unknown as AccessTokenPayload;
@@ -64,10 +61,7 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
 
 export function verifyRefreshToken(token: string): RefreshTokenPayload {
   const payload = decode(token, env.jwt.refreshSecret);
-  if (
-    payload.type !== "refresh" ||
-    !hasStrings(payload, ["sub", "family", "tokenId"])
-  ) {
+  if (payload.type !== "refresh" || !hasStrings(payload, ["sub", "family", "tokenId"])) {
     throw new jwt.JsonWebTokenError("invalid refresh token");
   }
   return payload as unknown as RefreshTokenPayload;

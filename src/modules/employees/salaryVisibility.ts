@@ -22,7 +22,8 @@ export function redactContract<T extends object>(contract: T): Omit<T, "salary" 
 export function redactEmployee<T extends object>(employee: T): Omit<T, (typeof SALARY_FIELDS)[number]> {
   const copy: Record<string, unknown> = { ...(employee as Record<string, unknown>) };
   for (const field of SALARY_FIELDS) delete copy[field];
-  if (Array.isArray(copy.contracts)) copy.contracts = copy.contracts.map((contract: object) => redactContract(contract));
+  if (Array.isArray(copy.contracts))
+    copy.contracts = copy.contracts.map((contract: object) => redactContract(contract));
   return copy as Omit<T, (typeof SALARY_FIELDS)[number]>;
 }
 

@@ -1,7 +1,14 @@
 import { type Request, type Response } from "express";
 import * as service from "./organization.service";
 import { parseBody, parseQuery } from "../../middleware/validate";
-import { addAdminSchema, createOrganizationSchema, listOrganizationsQuery, updateOrganizationSchema, updateSettingsSchema, updateSubscriptionSchema } from "./organization.validation";
+import {
+  addAdminSchema,
+  createOrganizationSchema,
+  listOrganizationsQuery,
+  updateOrganizationSchema,
+  updateSettingsSchema,
+  updateSubscriptionSchema,
+} from "./organization.validation";
 import { sendSuccess, sendCreated, sendPaginated } from "../../utils/response";
 import { ApiError } from "../../utils/apiError";
 import { requireAuthContext } from "../../utils/tenant";

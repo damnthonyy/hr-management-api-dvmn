@@ -17,7 +17,15 @@ router.patch("/:id", requirePermission(PERMISSIONS.ROLE_MANAGE), asyncHandler(co
 router.delete("/:id", requirePermission(PERMISSIONS.ROLE_MANAGE), asyncHandler(controller.deleteRole));
 
 router.post("/assignments", requirePermission(PERMISSIONS.ROLE_MANAGE), asyncHandler(controller.assignRole));
-router.delete("/assignments/:assignmentId", requirePermission(PERMISSIONS.ROLE_MANAGE), asyncHandler(controller.revokeAssignment));
-router.put("/users/:userId/system-role", requirePermission(PERMISSIONS.ROLE_MANAGE), asyncHandler(controller.setSystemRole));
+router.delete(
+  "/assignments/:assignmentId",
+  requirePermission(PERMISSIONS.ROLE_MANAGE),
+  asyncHandler(controller.revokeAssignment)
+);
+router.put(
+  "/users/:userId/system-role",
+  requirePermission(PERMISSIONS.ROLE_MANAGE),
+  asyncHandler(controller.setSystemRole)
+);
 
 export default router;

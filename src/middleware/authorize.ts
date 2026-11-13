@@ -3,7 +3,6 @@ import { SystemRole } from "@prisma/client";
 import { ApiError } from "../utils/apiError";
 import { type PermissionKey } from "../config/permissions";
 
-
 // logic for checking authentication and authorization in Express routes
 export function requireAuth(req: Request, _res: Response, next: NextFunction): void {
   if (!req.auth) {

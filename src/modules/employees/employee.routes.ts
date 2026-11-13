@@ -17,10 +17,22 @@ router.patch("/:id", requirePermission(PERMISSIONS.EMPLOYEE_UPDATE), asyncHandle
 router.post("/:id/deactivate", requirePermission(PERMISSIONS.EMPLOYEE_UPDATE), asyncHandler(controller.deactivate));
 router.delete("/:id", requirePermission(PERMISSIONS.EMPLOYEE_DELETE), asyncHandler(controller.remove));
 
-router.get("/:id/emergency-contacts", requirePermission(PERMISSIONS.EMPLOYEE_VIEW), asyncHandler(controller.listEmergencyContacts));
-router.post("/:id/emergency-contacts", requirePermission(PERMISSIONS.EMPLOYEE_UPDATE), asyncHandler(controller.addEmergencyContact));
+router.get(
+  "/:id/emergency-contacts",
+  requirePermission(PERMISSIONS.EMPLOYEE_VIEW),
+  asyncHandler(controller.listEmergencyContacts)
+);
+router.post(
+  "/:id/emergency-contacts",
+  requirePermission(PERMISSIONS.EMPLOYEE_UPDATE),
+  asyncHandler(controller.addEmergencyContact)
+);
 
-router.get("/:id/contracts", requireAnyPermission(PERMISSIONS.CONTRACT_VIEW, PERMISSIONS.EMPLOYEE_VIEW), asyncHandler(controller.listContracts));
+router.get(
+  "/:id/contracts",
+  requireAnyPermission(PERMISSIONS.CONTRACT_VIEW, PERMISSIONS.EMPLOYEE_VIEW),
+  asyncHandler(controller.listContracts)
+);
 router.post("/:id/contracts", requirePermission(PERMISSIONS.EMPLOYEE_UPDATE), asyncHandler(controller.addContract));
 
 router.get("/:id/salary-history", requirePermission(PERMISSIONS.SALARY_VIEW), asyncHandler(controller.salaryHistory));

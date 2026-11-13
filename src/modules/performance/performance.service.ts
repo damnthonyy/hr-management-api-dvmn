@@ -25,11 +25,14 @@ export async function listCycles(organizationId: string) {
   });
 }
 
-export async function createCycle(organizationId: string, data: {
-  name: string;
-  startDate: string;
-  endDate: string;
-}) {
+export async function createCycle(
+  organizationId: string,
+  data: {
+    name: string;
+    startDate: string;
+    endDate: string;
+  }
+) {
   return prisma.performanceCycle.create({
     data: {
       organizationId,
@@ -62,13 +65,17 @@ export async function listReviews(organizationId: string, query: ListReviewsQuer
   return { items, meta: buildMeta(params, total) };
 }
 
-export async function createReview(organizationId: string, data: {
-  cycleId: string;
-  employeeId: string;
-  score?: number;
-  summary?: string;
-  feedback?: string;
-}, authorId: string) {
+export async function createReview(
+  organizationId: string,
+  data: {
+    cycleId: string;
+    employeeId: string;
+    score?: number;
+    summary?: string;
+    feedback?: string;
+  },
+  authorId: string
+) {
   await assertOrgRefs(organizationId, { performanceCycle: data.cycleId, employee: data.employeeId });
   const review = await prisma.performanceReview.create({
     data: {
@@ -112,13 +119,16 @@ export async function listObjectives(organizationId: string, employeeId: string)
   return prisma.objective.findMany({ where: { employeeId }, orderBy: { createdAt: "desc" } });
 }
 
-export async function createObjective(organizationId: string, data: {
-  employeeId: string;
-  title: string;
-  description?: string;
-  weight?: number;
-  dueDate?: string;
-}) {
+export async function createObjective(
+  organizationId: string,
+  data: {
+    employeeId: string;
+    title: string;
+    description?: string;
+    weight?: number;
+    dueDate?: string;
+  }
+) {
   await assertOrgRefs(organizationId, { employee: data.employeeId });
   return prisma.objective.create({
     data: {

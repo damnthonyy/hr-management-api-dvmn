@@ -18,9 +18,21 @@ router.post("/reviews", requirePermission(PERMISSIONS.PERFORMANCE_MANAGE), async
 router.get("/reviews/:id", requirePermission(PERMISSIONS.PERFORMANCE_VIEW), asyncHandler(controller.getReview));
 router.patch("/reviews/:id", requirePermission(PERMISSIONS.PERFORMANCE_MANAGE), asyncHandler(controller.updateReview));
 
-router.get("/objectives/:employeeId", requirePermission(PERMISSIONS.PERFORMANCE_VIEW), asyncHandler(controller.listObjectives));
+router.get(
+  "/objectives/:employeeId",
+  requirePermission(PERMISSIONS.PERFORMANCE_VIEW),
+  asyncHandler(controller.listObjectives)
+);
 router.post("/objectives", requirePermission(PERMISSIONS.PERFORMANCE_MANAGE), asyncHandler(controller.createObjective));
-router.patch("/objectives/:id", requirePermission(PERMISSIONS.PERFORMANCE_MANAGE), asyncHandler(controller.updateObjective));
-router.delete("/objectives/:id", requirePermission(PERMISSIONS.PERFORMANCE_MANAGE), asyncHandler(controller.deleteObjective));
+router.patch(
+  "/objectives/:id",
+  requirePermission(PERMISSIONS.PERFORMANCE_MANAGE),
+  asyncHandler(controller.updateObjective)
+);
+router.delete(
+  "/objectives/:id",
+  requirePermission(PERMISSIONS.PERFORMANCE_MANAGE),
+  asyncHandler(controller.deleteObjective)
+);
 
 export default router;

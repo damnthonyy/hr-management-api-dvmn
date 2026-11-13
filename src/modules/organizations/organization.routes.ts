@@ -20,11 +20,7 @@ router.post("/", requireRole(SystemRole.SUPER_ADMIN), asyncHandler(controller.cr
 router.use("/:id", requireSameOrganizationParam("id"));
 router.get("/:id", asyncHandler(controller.getOne));
 router.get("/:id/stats", asyncHandler(controller.stats));
-router.patch(
-  "/:id",
-  requirePermission(PERMISSIONS.ORGANIZATION_MANAGE),
-  asyncHandler(controller.update)
-);
+router.patch("/:id", requirePermission(PERMISSIONS.ORGANIZATION_MANAGE), asyncHandler(controller.update));
 router.put(
   "/:id/settings",
   requirePermission(PERMISSIONS.ORGANIZATION_MANAGE),
@@ -37,10 +33,6 @@ router.put(
   asyncHandler(controller.updateSubscription)
 );
 router.get("/:id/admins", requirePermission(PERMISSIONS.USER_MANAGE), asyncHandler(controller.listAdmins));
-router.post(
-  "/:id/admins",
-  requirePermission(PERMISSIONS.USER_MANAGE),
-  asyncHandler(controller.addAdmin)
-);
+router.post("/:id/admins", requirePermission(PERMISSIONS.USER_MANAGE), asyncHandler(controller.addAdmin));
 
 export default router;
