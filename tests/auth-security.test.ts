@@ -109,4 +109,75 @@ describe("auth security", () => {
       expect((await prisma.user.findUnique({ where: { id: account.userId } }))?.emailVerified).toBe(true);
     });
   });
+
+  describe("sessions & refresh tokens", () => {
+    const refresh = (token: string) => request(app).post("/api/v1/auth/refresh").send({ refreshToken: token });
+
+    it("rotates the refresh token and keeps the session", async () => {
+      const account = await register("rotate");
+      const res = await refresh(account.refreshToken);
+      expect(res.status).toBe(200);
+      expect(res.body.data.refreshToken).not.toBe(account.refreshToken);
+      const me = await request(app).get("/api/v1/auth/me").set(bearer(res.body.data.accessToken));
+      expect(me.status).toBe(200);
+      expect(await prisma.session.count({ where: { userId: account.userId } })).toBe(1);
+    });
+
+    it("detects reuse of a rotated token and revokes the whole session", async () => {
+      const account = await register("reuse");
+      const rotated = await refresh(account.refreshToken);
+      expect(rotated.status).toBe(200);
+
+      // Replaying the old token (e.g. stolen) fails...
+      const replay = await refresh(account.refreshToken);
+      expect(replay.status).toBe(401);
+      // ...and also kills the legitimate token and access token of that session.
+      expect((await refresh(rotated.body.data.refreshToken)).status).toBe(401);
+      const me = await request(app).get("/api/v1/auth/me").set(bearer(rotated.body.data.accessToken));
+      expect(me.status).toBe(401);
+    });
+
+    it("lets only one of two concurrent refreshes with the same token succeed", async () => {
+      const account = await register("race");
+      const [first, second] = await Promise.all([refresh(account.refreshToken), refresh(account.refreshToken)]);
+      expect([first.status, second.status].filter((status) => status === 200)).toHaveLength(1);
+    });
+
+    it("rejects a refresh token whose stored hash does not match", async () => {
+      const account = await register("tamper");
+      await prisma.refreshToken.updateMany({ where: { userId: account.userId }, data: { tokenHash: sha256("other") } });
+      expect((await refresh(account.refreshToken)).status).toBe(401);
+    });
+
+    it("logout invalidates the access token and the refresh token", async () => {
+      const account = await register("logout");
+      const out = await request(app).post("/api/v1/auth/logout").set(bearer(account.accessToken)).send({});
+      expect(out.status).toBe(200);
+      expect((await request(app).get("/api/v1/auth/me").set(bearer(account.accessToken))).status).toBe(401);
+      expect((await refresh(account.refreshToken)).status).toBe(401);
+    });
+
+    it("revoking a session from another device invalidates it immediately", async () => {
+      const account = await register("revoke");
+      const other = await login(account.email);
+      expect(other.status).toBe(200);
+      const sessions = await request(app).get("/api/v1/auth/sessions").set(bearer(account.accessToken));
+      const target = sessions.body.data.find((session: { id: string }) =>
+        session.id !== JSON.parse(Buffer.from(account.accessToken.split(".")[1], "base64url").toString()).sessionId
+      );
+      const res = await request(app).delete(`/api/v1/auth/sessions/${target.id}`).set(bearer(account.accessToken));
+      expect(res.status).toBe(200);
+      expect((await request(app).get("/api/v1/auth/me").set(bearer(other.body.data.tokens.accessToken))).status).toBe(401);
+      expect((await refresh(other.body.data.tokens.refreshToken)).status).toBe(401);
+      expect((await request(app).get("/api/v1/auth/me").set(bearer(account.accessToken))).status).toBe(200);
+    });
+
+    it("cannot revoke another user's session", async () => {
+      const victim = await register("victim-session");
+      const attacker = await register("attacker-session");
+      const victimSession = await prisma.session.findFirstOrThrow({ where: { userId: victim.userId } });
+      await request(app).delete(`/api/v1/auth/sessions/${victimSession.id}`).set(bearer(attacker.accessToken));
+      expect((await request(app).get("/api/v1/auth/me").set(bearer(victim.accessToken))).status).toBe(200);
+    });
+  });
 });

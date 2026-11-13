@@ -9,6 +9,7 @@ import {
   signRefreshToken,
   verifyRefreshToken,
 } from "../../utils/jwt";
+import { randomUUID } from "crypto";
 import { slugify } from "../../utils/slug";
 import { recordAudit } from "../../services/audit.service";
 import { enqueueEmail } from "../../queues";
@@ -24,47 +25,64 @@ interface TokenBundle {
   expiresIn: number;
 }
 
+function refreshExpiry(): Date {
+  return new Date(Date.now() + env.jwt.refreshTtl * 1000);
+}
+
+/**
+ * Creates a refresh token row bound to `sessionId` and returns the signed
+ * JWT. Only its SHA-256 is stored.
+ */
+async function createRefreshToken(
+  db: Prisma.TransactionClient,
+  user: User,
+  sessionId: string,
+  family: string
+): Promise<{ id: string; token: string }> {
+  const id = randomUUID();
+  const token = signRefreshToken({ sub: user.id, organizationId: user.organizationId, family, tokenId: id });
+  await db.refreshToken.create({
+    data: { id, userId: user.id, sessionId, family, tokenHash: sha256(token), expiresAt: refreshExpiry() },
+  });
+  return { id, token };
+}
+
+function signAccess(user: User, sessionId: string): string {
+  return signAccessToken({
+    sub: user.id,
+    organizationId: user.organizationId,
+    email: user.email,
+    role: user.systemRole,
+    sessionId,
+  });
+}
+
 async function issueTokens(user: User, meta: RequestMeta): Promise<TokenBundle> {
   const session = await prisma.session.create({
     data: {
       userId: user.id,
       ipAddress: meta.ipAddress ?? null,
       userAgent: meta.userAgent ?? null,
-      expiresAt: new Date(Date.now() + env.jwt.refreshTtl * 1000),
+      expiresAt: refreshExpiry(),
     },
   });
+  const { token: refreshToken } = await createRefreshToken(prisma, user, session.id, randomToken(16));
+  return { accessToken: signAccess(user, session.id), refreshToken, expiresIn: env.jwt.accessTtl };
+}
 
-  const family = randomToken(16);
-  const refreshRecord = await prisma.refreshToken.create({
-    data: {
-      userId: user.id,
-      family,
-      tokenHash: "",
-      expiresAt: new Date(Date.now() + env.jwt.refreshTtl * 1000),
-    },
-  });
-
-  const accessToken = signAccessToken({
-    sub: user.id,
-    organizationId: user.organizationId,
-    email: user.email,
-    role: user.systemRole,
-    sessionId: session.id,
-  });
-
-  const refreshToken = signRefreshToken({
-    sub: user.id,
-    organizationId: user.organizationId,
-    family,
-    tokenId: refreshRecord.id,
-  });
-
-  await prisma.refreshToken.update({
-    where: { id: refreshRecord.id },
-    data: { tokenHash: sha256(refreshToken) },
-  });
-
-  return { accessToken, refreshToken, expiresIn: env.jwt.accessTtl };
+/**
+ * Revokes sessions and their refresh tokens. Used on logout, password
+ * change/reset and refresh token reuse.
+ */
+export async function revokeSessions(where: Prisma.SessionWhereInput): Promise<void> {
+  const now = new Date();
+  const sessions = await prisma.session.findMany({ where: { ...where, revokedAt: null }, select: { id: true } });
+  const ids = sessions.map((session) => session.id);
+  if (ids.length === 0) return;
+  await prisma.$transaction([
+    prisma.session.updateMany({ where: { id: { in: ids } }, data: { revokedAt: now } }),
+    prisma.refreshToken.updateMany({ where: { sessionId: { in: ids }, revokedAt: null }, data: { revokedAt: now } }),
+  ]);
 }
 
 export async function register(input: {
@@ -187,75 +205,74 @@ export async function login(input: { email: string; password: string }, meta: Re
 }
 
 export async function refresh(input: { refreshToken: string }, meta: RequestMeta) {
+  const invalid = () => ApiError.unauthorized("Invalid refresh token");
   let payload;
   try {
     payload = verifyRefreshToken(input.refreshToken);
   } catch {
-    throw ApiError.unauthorized("Invalid refresh token");
+    throw invalid();
   }
 
   const record = await prisma.refreshToken.findUnique({ where: { id: payload.tokenId } });
-  if (!record || record.revokedAt) {
-    throw ApiError.unauthorized("Refresh token is no longer valid");
-  }
-  if (record.expiresAt.getTime() < Date.now()) {
-    throw ApiError.unauthorized("Refresh token expired");
+  if (!record || record.userId !== payload.sub || record.tokenHash !== sha256(input.refreshToken)) {
+    throw invalid();
   }
 
-  const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+  // Reuse detection: a rotated or revoked token is being presented again,
+  // so it has leaked. Kill the whole family and its session(s).
+  const reuse = async () => {
+    const family = await prisma.refreshToken.findMany({
+      where: { family: record.family },
+      select: { sessionId: true },
+    });
+    const sessionIds = family.map((t) => t.sessionId).filter((id): id is string => id !== null);
+    await prisma.refreshToken.updateMany({
+      where: { family: record.family, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    await revokeSessions({ id: { in: sessionIds } });
+    await recordAudit({
+      userId: record.userId,
+      action: "auth.refresh_token_reused",
+      entityType: "RefreshToken",
+      entityId: record.id,
+      ipAddress: meta.ipAddress,
+    });
+    return ApiError.unauthorized("Refresh token is no longer valid");
+  };
+
+  if (record.revokedAt || record.replacedBy) throw await reuse();
+  if (!record.sessionId || record.expiresAt.getTime() < Date.now()) throw invalid();
+
+  const session = await prisma.session.findUnique({ where: { id: record.sessionId } });
+  if (!session || session.revokedAt || session.expiresAt.getTime() < Date.now()) throw invalid();
+
+  const user = await prisma.user.findUnique({ where: { id: record.userId } });
   if (!user || !user.isActive) {
     throw ApiError.unauthorized("Account is not active");
   }
 
-  const newRecord = await prisma.refreshToken.create({
-    data: {
-      userId: user.id,
-      family: record.family,
-      tokenHash: "",
-      expiresAt: new Date(Date.now() + env.jwt.refreshTtl * 1000),
-    },
-  });
-
-  await prisma.refreshToken.update({
-    where: { id: record.id },
-    data: { replacedBy: newRecord.id },
-  });
-
-  const accessToken = signAccessToken({
-    sub: user.id,
-    organizationId: user.organizationId,
-    email: user.email,
-    role: user.systemRole,
-    sessionId: payload.tokenId,
-  });
-
-  const refreshToken = signRefreshToken({
-    sub: user.id,
-    organizationId: user.organizationId,
-    family: record.family,
-    tokenId: newRecord.id,
-  });
-
-  await prisma.refreshToken.update({
-    where: { id: newRecord.id },
-    data: { tokenHash: sha256(refreshToken) },
-  });
-
-  return { accessToken, refreshToken, expiresIn: env.jwt.accessTtl };
-}
-
-export async function logout(userId: string, sessionId: string, refreshToken?: string) {
-  await prisma.session.updateMany({
-    where: { id: sessionId },
-    data: { revokedAt: new Date() },
-  });
-  if (refreshToken) {
-    const hash = sha256(refreshToken);
-    await prisma.refreshToken.updateMany({
-      where: { tokenHash: hash },
+  const sessionId = record.sessionId;
+  const rotated = await prisma.$transaction(async (tx) => {
+    // Conditional update: two concurrent refreshes with the same token
+    // cannot both succeed; the loser is treated as a reuse.
+    const claimed = await tx.refreshToken.updateMany({
+      where: { id: record.id, revokedAt: null, replacedBy: null },
       data: { revokedAt: new Date() },
     });
-  }
+    if (claimed.count === 0) return null;
+    const next = await createRefreshToken(tx, user, sessionId, record.family);
+    await tx.refreshToken.update({ where: { id: record.id }, data: { replacedBy: next.id } });
+    await tx.session.update({ where: { id: sessionId }, data: { lastSeenAt: new Date() } });
+    return next;
+  });
+  if (!rotated) throw await reuse();
+
+  return { accessToken: signAccess(user, sessionId), refreshToken: rotated.token, expiresIn: env.jwt.accessTtl };
+}
+
+export async function logout(userId: string, sessionId: string): Promise<void> {
+  await revokeSessions({ id: sessionId, userId });
 }
 
 export async function forgotPassword(email: string): Promise<void> {
@@ -373,10 +390,7 @@ export async function listSessions(userId: string) {
 }
 
 export async function revokeSession(userId: string, sessionId: string) {
-  await prisma.session.updateMany({
-    where: { id: sessionId, userId },
-    data: { revokedAt: new Date() },
-  });
+  await revokeSessions({ id: sessionId, userId });
   return { ok: true };
 }
 

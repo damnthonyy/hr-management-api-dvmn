@@ -24,7 +24,7 @@ export async function refresh(req: Request, res: Response): Promise<void> {
 
 export async function logout(req: Request, res: Response): Promise<void> {
   if (!req.auth) throw ApiError.unauthorized();
-  await authService.logout(req.auth.userId, req.auth.sessionId, req.body?.refreshToken);
+  await authService.logout(req.auth.userId, req.auth.sessionId);
   sendSuccess(res, { ok: true });
 }
 

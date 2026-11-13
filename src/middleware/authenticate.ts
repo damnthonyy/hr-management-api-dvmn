@@ -4,6 +4,9 @@ import { ApiError } from "../utils/apiError";
 import { verifyAccessToken } from "../utils/jwt";
 import { permissionsForRole } from "../config/permissions";
 
+/** Avoid a write per request: refresh lastSeenAt at most every 5 minutes. */
+const SESSION_TOUCH_INTERVAL_MS = 5 * 60 * 1000;
+
 export async function authenticate(req: Request, _res: Response, next: NextFunction): Promise<void> {
   try {
     const header = req.header("authorization");
@@ -22,6 +25,18 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
 
     if (!user || !user.isActive) {
       throw ApiError.unauthorized("Account is not active");
+    }
+
+    // The access token is only valid while its session is: logout,
+    // "revoke session" and password changes take effect immediately.
+    const session = await prisma.session.findUnique({ where: { id: payload.sessionId } });
+    if (!session || session.userId !== user.id || session.revokedAt || session.expiresAt.getTime() < Date.now()) {
+      throw ApiError.unauthorized("Session is no longer valid");
+    }
+    if (Date.now() - session.lastSeenAt.getTime() > SESSION_TOUCH_INTERVAL_MS) {
+      void prisma.session
+        .update({ where: { id: session.id }, data: { lastSeenAt: new Date() } })
+        .catch(() => undefined);
     }
 
     // Role and organization come from the database, not from the token:
