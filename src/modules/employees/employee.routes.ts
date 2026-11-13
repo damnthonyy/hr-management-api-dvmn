@@ -25,7 +25,7 @@ router.post("/:id/deactivate", requirePermission(PERMISSIONS.EMPLOYEE_UPDATE), a
 router.delete("/:id", requirePermission(PERMISSIONS.EMPLOYEE_DELETE), asyncHandler(controller.remove));
 
 router.get("/:id/emergency-contacts", requirePermission(PERMISSIONS.EMPLOYEE_VIEW), asyncHandler(controller.listEmergencyContacts));
-router.post("/:id/emergency-contacts", validate(emergencyContactSchema), asyncHandler(controller.addEmergencyContact));
+router.post("/:id/emergency-contacts", requirePermission(PERMISSIONS.EMPLOYEE_UPDATE), validate(emergencyContactSchema), asyncHandler(controller.addEmergencyContact));
 
 router.get("/:id/contracts", requireAnyPermission(PERMISSIONS.CONTRACT_VIEW, PERMISSIONS.EMPLOYEE_VIEW), asyncHandler(controller.listContracts));
 router.post("/:id/contracts", requirePermission(PERMISSIONS.EMPLOYEE_UPDATE), validate(contractSchema), asyncHandler(controller.addContract));
