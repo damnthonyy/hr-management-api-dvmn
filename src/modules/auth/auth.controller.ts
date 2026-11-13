@@ -29,11 +29,10 @@ export async function logout(req: Request, res: Response): Promise<void> {
 }
 
 export async function forgotPassword(req: Request, res: Response): Promise<void> {
-  const result = await authService.forgotPassword(req.body.email);
-  sendSuccess(res, {
-    message: "If an account exists, a reset link has been sent",
-    ...(result.token ? { debugToken: result.token } : {}),
-  });
+  // Same response whether or not the account exists, and the token is
+  // only ever sent by email.
+  await authService.forgotPassword(req.body.email);
+  sendSuccess(res, { message: "If an account exists, a reset link has been sent" });
 }
 
 export async function resetPassword(req: Request, res: Response): Promise<void> {

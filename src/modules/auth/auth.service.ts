@@ -258,10 +258,10 @@ export async function logout(userId: string, sessionId: string, refreshToken?: s
   }
 }
 
-export async function forgotPassword(email: string) {
+export async function forgotPassword(email: string): Promise<void> {
   const user = await prisma.user.findFirst({ where: { email } });
   if (!user) {
-    return { token: null };
+    return;
   }
   const token = randomToken(24);
   await prisma.passwordResetToken.create({
@@ -281,7 +281,6 @@ export async function forgotPassword(email: string) {
       token,
     },
   });
-  return { token };
 }
 
 export async function resetPassword(token: string, newPassword: string) {
