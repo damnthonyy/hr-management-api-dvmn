@@ -88,4 +88,26 @@ describe("document security", () => {
       expect(res.body.error.stack).toBeUndefined();
     });
   });
+
+  describe("import from URL (SSRF)", () => {
+    it.each([
+      "http://169.254.169.254/latest/meta-data/iam/security-credentials/",
+      "https://169.254.169.254/latest/meta-data/",
+      "https://127.0.0.1/",
+      "https://localhost:6379/",
+      "https://[::1]/",
+      "https://2130706433/",
+      "https://10.0.0.5/admin",
+      "https://metadata.google.internal/computeMetadata/v1/",
+      "file:///etc/passwd",
+    ])("refuses %s without creating anything", async (url) => {
+      const before = await prisma.document.count({ where: { organizationId: orgId } });
+      const res = await request(app)
+        .post("/api/v1/documents/import-from-url")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ url, fileName: "../../../../tmp/pwned" });
+      expect(res.status).toBe(400);
+      expect(await prisma.document.count({ where: { organizationId: orgId } })).toBe(before);
+    });
+  });
 });

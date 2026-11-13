@@ -1,7 +1,6 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import axios from "axios";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { uploadsDir, resolveStoragePath, sanitizeFileName } from "../../lib/storage";
@@ -10,7 +9,9 @@ import { recordAudit } from "../../services/audit.service";
 import { enqueueDocumentProcessing } from "../../queues";
 import { logger } from "../../lib/logger";
 import { assertOrgRefs } from "../../utils/tenant";
-import { contentMatchesType, SIGNATURE_BYTES } from "../../lib/fileType";
+import { contentMatchesType, extensionFor, isAllowedMimeType, SIGNATURE_BYTES } from "../../lib/fileType";
+import { fetchRemoteFile, RemoteFileTooLargeError, UnsafeUrlError } from "../../lib/safeFetch";
+import { env } from "../../config/env";
 
 interface UploadedFile {
   filename: string;
@@ -87,26 +88,34 @@ export async function importFromUrl(organizationId: string, data: {
   fileName?: string;
 }, uploadedById: string) {
   await assertOrgRefs(organizationId, { employee: data.employeeId, documentCategory: data.categoryId });
-  const response = await axios.get(data.url, {
-    responseType: "arraybuffer",
-    maxRedirects: 5,
-    timeout: 10000,
-    validateStatus: () => true,
-  });
 
-  if (response.status >= 400) {
-    throw ApiError.badRequest(`Remote server responded with status ${response.status}`);
+  let remote;
+  try {
+    remote = await fetchRemoteFile(data.url, { maxBytes: env.maxUploadBytes });
+  } catch (error) {
+    if (error instanceof UnsafeUrlError) throw ApiError.badRequest(error.message);
+    if (error instanceof RemoteFileTooLargeError) throw ApiError.payloadTooLarge("Remote file is too large");
+    // Do not echo network errors (refused, timeout...): they would turn the
+    // endpoint into a port scanner.
+    logger.warn({ err: error, url: data.url }, "document import failed");
+    throw ApiError.badRequest("Could not download the file");
   }
 
-  const buffer = Buffer.from(response.data as ArrayBuffer);
-  const contentType = String(response.headers["content-type"] ?? "application/octet-stream").split(";")[0];
+  if (remote.status < 200 || remote.status >= 300) {
+    throw ApiError.badRequest("Could not download the file");
+  }
+  if (!isAllowedMimeType(remote.contentType) || !contentMatchesType(remote.contentType, remote.body)) {
+    throw ApiError.unsupportedMediaType("Only PDF, DOCX, PNG and JPEG files are accepted");
+  }
+
+  const buffer = remote.body;
   // The user-supplied name is only kept for display: the file on disk gets
   // a server-generated name, so "../" in fileName cannot escape uploads/.
-  const safeName = sanitizeFileName(data.fileName ?? path.basename(new URL(data.url).pathname), "import");
-  const storedName = `${Date.now()}-${randomToken(8)}`;
+  const safeName = sanitizeFileName(data.fileName ?? path.basename(new URL(remote.finalUrl).pathname), "import");
+  const storedName = `${Date.now()}-${randomToken(8)}${extensionFor(remote.contentType)}`;
   const absolutePath = path.join(uploadsDir(), storedName);
 
-  fs.writeFileSync(absolutePath, buffer);
+  await fs.promises.writeFile(absolutePath, buffer);
   const checksum = crypto.createHash("sha256").update(buffer).digest("hex");
 
   const document = await prisma.document.create({
@@ -117,7 +126,7 @@ export async function importFromUrl(organizationId: string, data: {
       uploadedById,
       fileName: storedName,
       originalName: safeName,
-      mimeType: contentType,
+      mimeType: remote.contentType,
       sizeBytes: buffer.length,
       storagePath: path.join("uploads", storedName),
       source: "url-import",
