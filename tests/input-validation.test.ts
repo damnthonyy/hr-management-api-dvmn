@@ -53,4 +53,43 @@ describe("input validation", () => {
       expect(res.status).toBe(404);
     });
   });
+
+  describe("query strings", () => {
+    it.each([
+      "/api/v1/employees?status=FIRED",
+      "/api/v1/employees?departmentId=not-a-uuid",
+      "/api/v1/employees?search=" + "x".repeat(101),
+      "/api/v1/employees?page=1&page=2",
+      "/api/v1/documents?employeeId=1",
+      "/api/v1/leave/requests?status=MAYBE",
+      "/api/v1/performance/reviews?cycleId=abc",
+      "/api/v1/notifications?status=ARCHIVED",
+      "/api/v1/audit-logs?userId=abc",
+      "/api/v1/departments/teams?departmentId=abc",
+      "/api/v1/auth/verify-email?token=a&token=b",
+    ])("GET %s answers 400 with the offending field", async (url) => {
+      const res = await request(app).get(url).set(auth());
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("BAD_REQUEST");
+      expect(res.body.error.details?.length).toBeGreaterThan(0);
+    });
+
+    it("rejects invalid calendar dates instead of querying with Invalid Date", async () => {
+      const department = await request(app)
+        .post("/api/v1/departments")
+        .set(auth())
+        .send({ name: "Calendar", code: "CAL" });
+      expect(department.status).toBe(201);
+      const base = `/api/v1/leave/calendar/${department.body.data.id}`;
+      expect((await request(app).get(`${base}?from=garbage`).set(auth())).status).toBe(400);
+      expect((await request(app).get(`${base}?from=2026-02-01&to=2026-01-01`).set(auth())).status).toBe(400);
+      expect((await request(app).get(`${base}?from=2026-01-01&to=2026-02-01`).set(auth())).status).toBe(200);
+    });
+
+    it("applies valid filters", async () => {
+      const res = await request(app).get("/api/v1/employees?status=ACTIVE&search=%20nobody%20").set(auth());
+      expect(res.status).toBe(200);
+      expect(res.body.data).toEqual([]);
+    });
+  });
 });

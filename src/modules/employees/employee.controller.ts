@@ -1,10 +1,12 @@
 import { Request, Response } from "express";
 import * as service from "./employee.service";
+import { parseQuery } from "../../middleware/validate";
+import { listEmployeesQuery } from "./employee.validation";
 import { sendSuccess, sendCreated, sendPaginated, sendNoContent } from "../../utils/response";
 import { requireAuthContext, requireOrgId } from "../../utils/tenant";
 
 export async function list(req: Request, res: Response): Promise<void> {
-  const { items, meta } = await service.listEmployees(requireOrgId(req), req.query as Record<string, unknown>);
+  const { items, meta } = await service.listEmployees(requireOrgId(req), parseQuery(req, listEmployeesQuery));
   sendPaginated(res, items, meta);
 }
 

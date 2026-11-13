@@ -1,10 +1,12 @@
 import { Request, Response } from "express";
 import * as service from "./department.service";
+import { parseQuery } from "../../middleware/validate";
+import { listDepartmentsQuery, listTeamsQuery } from "./department.validation";
 import { sendSuccess, sendCreated, sendPaginated, sendNoContent } from "../../utils/response";
 import { requireAuthContext, requireOrgId } from "../../utils/tenant";
 
 export async function list(req: Request, res: Response): Promise<void> {
-  const { items, meta } = await service.listDepartments(requireOrgId(req), req.query as Record<string, unknown>);
+  const { items, meta } = await service.listDepartments(requireOrgId(req), parseQuery(req, listDepartmentsQuery));
   sendPaginated(res, items, meta);
 }
 
@@ -49,7 +51,7 @@ export async function transferEmployee(req: Request, res: Response): Promise<voi
 }
 
 export async function listTeams(req: Request, res: Response): Promise<void> {
-  sendSuccess(res, await service.listTeams(requireOrgId(req), req.query as Record<string, unknown>));
+  sendSuccess(res, await service.listTeams(requireOrgId(req), parseQuery(req, listTeamsQuery)));
 }
 
 export async function createTeam(req: Request, res: Response): Promise<void> {

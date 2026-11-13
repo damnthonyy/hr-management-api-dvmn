@@ -1,10 +1,12 @@
 import { Request, Response } from "express";
 import * as service from "./payroll.service";
+import { parseQuery } from "../../middleware/validate";
+import { listPayrollQuery } from "./payroll.validation";
 import { sendSuccess, sendCreated, sendPaginated } from "../../utils/response";
 import { requireAuthContext, requireOrgId } from "../../utils/tenant";
 
 export async function listPeriods(req: Request, res: Response): Promise<void> {
-  const { items, meta } = await service.listPeriods(requireOrgId(req), req.query as Record<string, unknown>);
+  const { items, meta } = await service.listPeriods(requireOrgId(req), parseQuery(req, listPayrollQuery));
   sendPaginated(res, items, meta);
 }
 
@@ -25,7 +27,7 @@ export async function listRecords(req: Request, res: Response): Promise<void> {
   const { items, meta } = await service.listRecords(
     requireOrgId(req),
     req.params.periodId,
-    req.query as Record<string, unknown>
+    parseQuery(req, listPayrollQuery)
   );
   sendPaginated(res, items, meta);
 }

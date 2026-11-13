@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { LeaveRequestStatus } from "@prisma/client";
+import { paginationQuery, uuidFilter, dateFilter } from "../../utils/query";
 
 export const createLeaveTypeSchema = z.object({
   name: z.string().min(1).max(80),
@@ -26,3 +28,15 @@ export const setBalanceSchema = z.object({
   year: z.number().int(),
   entitledDays: z.number().nonnegative(),
 });
+
+export const listLeaveRequestsQuery = z.object({
+  ...paginationQuery,
+  status: z.enum(LeaveRequestStatus).optional(),
+  employeeId: uuidFilter,
+});
+export type ListLeaveRequestsQuery = z.infer<typeof listLeaveRequestsQuery>;
+
+export const calendarQuery = z
+  .object({ from: dateFilter.optional(), to: dateFilter.optional() })
+  .refine((value) => !value.from || !value.to || value.from <= value.to, { message: "from must be before to", path: ["to"] });
+export type CalendarQuery = z.infer<typeof calendarQuery>;

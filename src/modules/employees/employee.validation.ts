@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationQuery, searchFilter, uuidFilter } from "../../utils/query";
 
 export const createEmployeeSchema = z.object({
   firstName: z.string().min(1).max(80),
@@ -45,3 +46,13 @@ export const salaryUpdateSchema = z.object({
   reason: z.string().max(240).optional(),
   effectiveAt: z.iso.datetime().optional(),
 });
+
+export const listEmployeesQuery = z.object({
+  ...paginationQuery,
+  sort: z.string().max(40).optional(),
+  departmentId: uuidFilter,
+  managerId: uuidFilter,
+  status: z.enum(["ACTIVE", "ON_LEAVE", "SUSPENDED", "TERMINATED"]).optional(),
+  search: searchFilter,
+});
+export type ListEmployeesQuery = z.infer<typeof listEmployeesQuery>;

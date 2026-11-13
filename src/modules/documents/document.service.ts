@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { uploadsDir, resolveStoragePath, sanitizeFileName } from "../../lib/storage";
@@ -13,6 +14,7 @@ import { contentMatchesType, extensionFor, isAllowedMimeType, SIGNATURE_BYTES } 
 import { fetchRemoteFile, RemoteFileTooLargeError, UnsafeUrlError } from "../../lib/safeFetch";
 import { env } from "../../config/env";
 import { buildMeta, parsePagination } from "../../utils/pagination";
+import type { ListDocumentsQuery } from "./document.validation";
 
 interface UploadedFile {
   filename: string;
@@ -22,10 +24,10 @@ interface UploadedFile {
   path: string;
 }
 
-export async function listDocuments(organizationId: string, query: Record<string, unknown>) {
-  const where: Record<string, unknown> = { organizationId };
-  if (typeof query.employeeId === "string") where.employeeId = query.employeeId;
-  if (typeof query.categoryId === "string") where.categoryId = query.categoryId;
+export async function listDocuments(organizationId: string, query: ListDocumentsQuery) {
+  const where: Prisma.DocumentWhereInput = { organizationId };
+  if (query.employeeId) where.employeeId = query.employeeId;
+  if (query.categoryId) where.categoryId = query.categoryId;
   const params = parsePagination(query);
   const [items, total] = await Promise.all([
     prisma.document.findMany({

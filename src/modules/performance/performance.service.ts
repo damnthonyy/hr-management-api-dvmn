@@ -1,8 +1,10 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { recordAudit } from "../../services/audit.service";
 import { assertOrgRefs } from "../../utils/tenant";
 import { buildMeta, parsePagination } from "../../utils/pagination";
+import type { ListReviewsQuery } from "./performance.validation";
 
 /** Reviews and objectives have no organizationId column: scope through the employee. */
 async function assertReviewInOrg(organizationId: string, id: string): Promise<void> {
@@ -38,10 +40,10 @@ export async function createCycle(organizationId: string, data: {
   });
 }
 
-export async function listReviews(organizationId: string, query: Record<string, unknown>) {
-  const where: Record<string, unknown> = { employee: { organizationId } };
-  if (typeof query.cycleId === "string") where.cycleId = query.cycleId;
-  if (typeof query.employeeId === "string") where.employeeId = query.employeeId;
+export async function listReviews(organizationId: string, query: ListReviewsQuery) {
+  const where: Prisma.PerformanceReviewWhereInput = { employee: { organizationId } };
+  if (query.cycleId) where.cycleId = query.cycleId;
+  if (query.employeeId) where.employeeId = query.employeeId;
   const params = parsePagination(query);
   const [items, total] = await Promise.all([
     prisma.performanceReview.findMany({

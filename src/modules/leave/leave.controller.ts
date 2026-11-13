@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
 import * as service from "./leave.service";
+import { parseQuery } from "../../middleware/validate";
+import { calendarQuery, listLeaveRequestsQuery } from "./leave.validation";
 import { sendSuccess, sendCreated, sendPaginated } from "../../utils/response";
 import { requireAuthContext, requireOrgId } from "../../utils/tenant";
 
@@ -14,7 +16,7 @@ export async function createType(req: Request, res: Response): Promise<void> {
 }
 
 export async function listRequests(req: Request, res: Response): Promise<void> {
-  const { items, meta } = await service.listRequests(orgId(req), req.query as Record<string, unknown>);
+  const { items, meta } = await service.listRequests(orgId(req), parseQuery(req, listLeaveRequestsQuery));
   sendPaginated(res, items, meta);
 }
 
@@ -51,5 +53,5 @@ export async function history(req: Request, res: Response): Promise<void> {
 }
 
 export async function calendar(req: Request, res: Response): Promise<void> {
-  sendSuccess(res, await service.departmentCalendar(orgId(req), req.params.departmentId, req.query as Record<string, unknown>));
+  sendSuccess(res, await service.departmentCalendar(orgId(req), req.params.departmentId, parseQuery(req, calendarQuery)));
 }

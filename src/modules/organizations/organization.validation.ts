@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { accountEmail } from "../../utils/schemas";
+import { paginationQuery, searchFilter } from "../../utils/query";
 
 export const createOrganizationSchema = z.object({
   name: z.string().min(2).max(120),
@@ -38,3 +39,6 @@ export const addAdminSchema = z.object({
   firstName: z.string().min(1).max(80),
   lastName: z.string().min(1).max(80),
 });
+
+export const listOrganizationsQuery = z.object({ ...paginationQuery, search: searchFilter });
+export type ListOrganizationsQuery = z.infer<typeof listOrganizationsQuery>;

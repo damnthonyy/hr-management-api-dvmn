@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { parsePagination, buildMeta } from "../../utils/pagination";
+import type { ListPayrollQuery } from "./payroll.validation";
 import { recordAudit } from "../../services/audit.service";
 import { enqueuePayslip } from "../../queues";
 
@@ -21,7 +22,7 @@ async function assertRecordInOrg(organizationId: string, id: string): Promise<vo
   if (count === 0) throw ApiError.notFound("Payroll record not found");
 }
 
-export async function listPeriods(organizationId: string, query: Record<string, unknown>) {
+export async function listPeriods(organizationId: string, query: ListPayrollQuery) {
   const params = parsePagination(query);
   const [items, total] = await Promise.all([
     prisma.payrollPeriod.findMany({
@@ -112,7 +113,7 @@ export async function generateRecords(
   return { generated: created.length };
 }
 
-export async function listRecords(organizationId: string, periodId: string, query: Record<string, unknown>) {
+export async function listRecords(organizationId: string, periodId: string, query: ListPayrollQuery) {
   await findPeriodInOrg(organizationId, periodId);
   const params = parsePagination(query);
   const [items, total] = await Promise.all([

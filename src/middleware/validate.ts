@@ -2,36 +2,41 @@ import { NextFunction, Request, Response, Router } from "express";
 import { z, ZodError, type ZodType } from "zod";
 import { ApiError } from "../utils/apiError";
 
-type Source = "body" | "query" | "params";
+export function validationError(error: ZodError): ApiError {
+  return ApiError.badRequest(
+    "Request validation failed",
+    error.issues.map((issue) => ({
+      path: issue.path.join("."),
+      message: issue.message,
+    }))
+  );
+}
 
-export function validate(schema: ZodType, source: Source = "body") {
+export function validate(schema: ZodType, source: "body" | "params" = "body") {
   return (req: Request, _res: Response, next: NextFunction): void => {
-    try {
-      const parsed = schema.parse(req[source]);
-      if (source === "body") {
-        req.body = parsed;
-      } else if (source === "params") {
-        Object.assign(req.params, parsed as Record<string, string>);
-      } else {
-        (req as unknown as Record<string, unknown>).validatedQuery = parsed;
-      }
-      next();
-    } catch (error) {
-      if (error instanceof ZodError) {
-        next(
-          ApiError.badRequest(
-            "Request validation failed",
-            error.issues.map((issue) => ({
-              path: issue.path.join("."),
-              message: issue.message,
-            }))
-          )
-        );
-        return;
-      }
-      next(error);
+    const result = schema.safeParse(req[source]);
+    if (!result.success) {
+      next(validationError(result.error));
+      return;
     }
+    if (source === "body") {
+      req.body = result.data;
+    } else {
+      Object.assign(req.params, result.data as Record<string, string>);
+    }
+    next();
   };
+}
+
+/**
+ * Parses req.query with a schema and returns the typed result. Used in
+ * controllers rather than as a middleware so the type flows to the service
+ * (req.query itself stays typed as ParsedQs). Throws a 400 on invalid input.
+ */
+export function parseQuery<S extends ZodType>(req: Request, schema: S): z.output<S> {
+  const result = schema.safeParse(req.query);
+  if (!result.success) throw validationError(result.error);
+  return result.data;
 }
 
 /** Every id in this API is a UUID (Prisma `@default(uuid())`). */

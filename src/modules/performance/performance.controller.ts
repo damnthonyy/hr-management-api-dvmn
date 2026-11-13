@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
 import * as service from "./performance.service";
+import { parseQuery } from "../../middleware/validate";
+import { listReviewsQuery } from "./performance.validation";
 import { sendSuccess, sendCreated, sendNoContent, sendPaginated } from "../../utils/response";
 import { requireAuthContext, requireOrgId } from "../../utils/tenant";
 
@@ -12,7 +14,7 @@ export async function createCycle(req: Request, res: Response): Promise<void> {
 }
 
 export async function listReviews(req: Request, res: Response): Promise<void> {
-  const { items, meta } = await service.listReviews(requireOrgId(req), req.query as Record<string, unknown>);
+  const { items, meta } = await service.listReviews(requireOrgId(req), parseQuery(req, listReviewsQuery));
   sendPaginated(res, items, meta);
 }
 

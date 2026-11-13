@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { parsePagination, buildMeta } from "../../utils/pagination";
+import type { CalendarQuery, ListLeaveRequestsQuery } from "./leave.validation";
 import { recordAudit } from "../../services/audit.service";
 import { enqueueNotification, enqueueEmail } from "../../queues";
 import { assertOrgRefs } from "../../utils/tenant";
@@ -36,11 +37,11 @@ export async function createLeaveType(organizationId: string, data: Record<strin
   });
 }
 
-export async function listRequests(organizationId: string, query: Record<string, unknown>) {
+export async function listRequests(organizationId: string, query: ListLeaveRequestsQuery) {
   const params = parsePagination(query);
   const where: Prisma.LeaveRequestWhereInput = { organizationId };
-  if (typeof query.status === "string") where.status = query.status as never;
-  if (typeof query.employeeId === "string") where.employeeId = query.employeeId;
+  if (query.status) where.status = query.status;
+  if (query.employeeId) where.employeeId = query.employeeId;
 
   const [items, total] = await Promise.all([
     prisma.leaveRequest.findMany({
@@ -294,11 +295,11 @@ export async function employeeHistory(organizationId: string, employeeId: string
 export async function departmentCalendar(
   organizationId: string,
   departmentId: string,
-  query: Record<string, unknown>
+  query: CalendarQuery
 ) {
   await assertOrgRefs(organizationId, { department: departmentId });
-  const from = typeof query.from === "string" ? new Date(query.from) : new Date();
-  const to = typeof query.to === "string" ? new Date(query.to) : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+  const from = query.from ?? new Date();
+  const to = query.to ?? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
   return prisma.leaveRequest.findMany({
     where: {
       organizationId,

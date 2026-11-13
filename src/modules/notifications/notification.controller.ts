@@ -1,12 +1,14 @@
 import { Request, Response } from "express";
 import * as service from "./notification.service";
+import { parseQuery } from "../../middleware/validate";
+import { listNotificationsQuery } from "./notification.validation";
 import { sendSuccess, sendPaginated } from "../../utils/response";
 import { ApiError } from "../../utils/apiError";
 import { canGrantSystemRole } from "../../config/permissions";
 
 export async function list(req: Request, res: Response): Promise<void> {
   if (!req.auth) throw ApiError.unauthorized();
-  const { items, meta } = await service.listForUser(req.auth.userId, req.query as Record<string, unknown>);
+  const { items, meta } = await service.listForUser(req.auth.userId, parseQuery(req, listNotificationsQuery));
   sendPaginated(res, items, meta);
 }
 

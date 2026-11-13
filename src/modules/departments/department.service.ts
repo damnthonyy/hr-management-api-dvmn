@@ -1,6 +1,8 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { parsePagination, buildMeta } from "../../utils/pagination";
+import type { ListDepartmentsQuery, ListTeamsQuery } from "./department.validation";
 import { recordAudit } from "../../services/audit.service";
 import { assertOrgRefs } from "../../utils/tenant";
 
@@ -22,7 +24,7 @@ async function findEmployeeInOrg(organizationId: string, id: string) {
   return employee;
 }
 
-export async function listDepartments(organizationId: string, query: Record<string, unknown>) {
+export async function listDepartments(organizationId: string, query: ListDepartmentsQuery) {
   const params = parsePagination(query);
   const [items, total] = await Promise.all([
     prisma.department.findMany({
@@ -166,9 +168,9 @@ export async function transferEmployee(
   return updated;
 }
 
-export async function listTeams(organizationId: string, query: Record<string, unknown>) {
-  const where = { organizationId } as Record<string, unknown>;
-  if (typeof query.departmentId === "string") where.departmentId = query.departmentId;
+export async function listTeams(organizationId: string, query: ListTeamsQuery) {
+  const where: Prisma.TeamWhereInput = { organizationId };
+  if (query.departmentId) where.departmentId = query.departmentId;
   return prisma.team.findMany({
     where,
     include: {

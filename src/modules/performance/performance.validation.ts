@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationQuery, uuidFilter } from "../../utils/query";
 
 export const createCycleSchema = z.object({
   name: z.string().min(1).max(120),
@@ -36,3 +37,6 @@ export const updateObjectiveSchema = z.object({
   progress: z.number().int().min(0).max(100).optional(),
   status: z.enum(["NOT_STARTED", "IN_PROGRESS", "COMPLETED", "CANCELED"]).optional(),
 });
+
+export const listReviewsQuery = z.object({ ...paginationQuery, cycleId: uuidFilter, employeeId: uuidFilter });
+export type ListReviewsQuery = z.infer<typeof listReviewsQuery>;

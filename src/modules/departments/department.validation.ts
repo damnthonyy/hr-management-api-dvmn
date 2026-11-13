@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationQuery, uuidFilter } from "../../utils/query";
 
 export const createDepartmentSchema = z.object({
   name: z.string().min(1).max(120),
@@ -37,3 +38,9 @@ export const updateTeamSchema = z.object({
 export const teamMemberSchema = z.object({
   employeeId: z.uuid(),
 });
+
+export const listDepartmentsQuery = z.object({ ...paginationQuery });
+export type ListDepartmentsQuery = z.infer<typeof listDepartmentsQuery>;
+
+export const listTeamsQuery = z.object({ departmentId: uuidFilter });
+export type ListTeamsQuery = z.infer<typeof listTeamsQuery>;

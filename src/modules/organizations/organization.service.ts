@@ -7,10 +7,11 @@ import { hashPassword } from "../../utils/password";
 import { parsePagination, buildMeta } from "../../utils/pagination";
 import { recordAudit } from "../../services/audit.service";
 import { cacheGet, cacheSet, cacheDelete } from "../../services/cache";
+import type { ListOrganizationsQuery } from "./organization.validation";
 
-export async function listOrganizations(query: Record<string, unknown>) {
+export async function listOrganizations(query: ListOrganizationsQuery) {
   const params = parsePagination(query);
-  const search = typeof query.search === "string" ? query.search : undefined;
+  const search = query.search || undefined;
   const where: Prisma.OrganizationWhereInput = search
     ? { OR: [{ name: { contains: search, mode: "insensitive" } }, { slug: { contains: search, mode: "insensitive" } }] }
     : {};

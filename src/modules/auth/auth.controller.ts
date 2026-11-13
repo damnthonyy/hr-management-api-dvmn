@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import * as authService from "./auth.service";
 import { sendSuccess, sendCreated } from "../../utils/response";
 import { ApiError } from "../../utils/apiError";
+import { parseQuery } from "../../middleware/validate";
+import { verifyEmailSchema } from "./auth.validation";
 
 function meta(req: Request) {
   return { ipAddress: req.ip, userAgent: req.header("user-agent") ?? undefined };
@@ -52,7 +54,8 @@ export async function changePassword(req: Request, res: Response): Promise<void>
 }
 
 export async function verifyEmail(req: Request, res: Response): Promise<void> {
-  const token = (req.body?.token ?? req.query.token) as string;
+  // POST: body already validated by the route; GET (link in the email): query.
+  const { token } = req.method === "GET" ? parseQuery(req, verifyEmailSchema) : (req.body as { token: string });
   const result = await authService.verifyEmail(token);
   sendSuccess(res, result);
 }

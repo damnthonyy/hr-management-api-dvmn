@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
 import * as service from "./organization.service";
+import { parseQuery } from "../../middleware/validate";
+import { listOrganizationsQuery } from "./organization.validation";
 import { sendSuccess, sendCreated, sendPaginated } from "../../utils/response";
 import { ApiError } from "../../utils/apiError";
 import { requireAuthContext } from "../../utils/tenant";
@@ -9,7 +11,7 @@ import { canGrantSystemRole } from "../../config/permissions";
 const PLATFORM_ONLY_FIELDS = ["employeeLimit", "isActive"] as const;
 
 export async function list(req: Request, res: Response): Promise<void> {
-  const { items, meta } = await service.listOrganizations(req.query as Record<string, unknown>);
+  const { items, meta } = await service.listOrganizations(parseQuery(req, listOrganizationsQuery));
   sendPaginated(res, items, meta);
 }
 

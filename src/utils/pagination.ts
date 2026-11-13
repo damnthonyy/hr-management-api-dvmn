@@ -22,7 +22,7 @@ function clampInt(raw: unknown, fallback: number, min: number, max: number): num
  * pageSize was unbounded (pageSize=1000000 loaded whole tables, negative
  * values reached Prisma): it is now clamped to 1..MAX_PAGE_SIZE.
  */
-export function parsePagination(query: Record<string, unknown>): PageParams {
+export function parsePagination(query: { page?: unknown; pageSize?: unknown }): PageParams {
   const page = clampInt(query.page, 1, 1, MAX_PAGE);
   const pageSize = clampInt(query.pageSize, DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE);
   return {

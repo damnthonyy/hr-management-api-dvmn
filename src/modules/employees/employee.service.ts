@@ -5,6 +5,7 @@ import { parsePagination, buildMeta, parseSort } from "../../utils/pagination";
 import { randomToken } from "../../utils/tokens";
 import { recordAudit } from "../../services/audit.service";
 import { assertOrgRefs } from "../../utils/tenant";
+import type { ListEmployeesQuery } from "./employee.validation";
 
 /** Loads an employee of the given organization or throws 404. */
 async function findEmployeeInOrg(organizationId: string, id: string) {
@@ -15,15 +16,15 @@ async function findEmployeeInOrg(organizationId: string, id: string) {
 
 const SORTABLE = ["createdAt", "lastName", "startDate", "jobTitle", "baseSalary", "status"];
 
-export async function listEmployees(organizationId: string, query: Record<string, unknown>) {
+export async function listEmployees(organizationId: string, query: ListEmployeesQuery) {
   const params = parsePagination(query);
   const orderBy = parseSort(query.sort, SORTABLE, { createdAt: "desc" });
 
   const filters: Prisma.EmployeeWhereInput = { organizationId };
-  if (typeof query.departmentId === "string") filters.departmentId = query.departmentId;
-  if (typeof query.status === "string") filters.status = query.status as never;
-  if (typeof query.managerId === "string") filters.managerId = query.managerId;
-  if (typeof query.search === "string" && query.search.length > 0) {
+  if (query.departmentId) filters.departmentId = query.departmentId;
+  if (query.status) filters.status = query.status;
+  if (query.managerId) filters.managerId = query.managerId;
+  if (query.search) {
     filters.OR = [
       { firstName: { contains: query.search, mode: "insensitive" } },
       { lastName: { contains: query.search, mode: "insensitive" } },
