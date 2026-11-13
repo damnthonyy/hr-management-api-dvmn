@@ -2,6 +2,11 @@ import { Request, Response } from "express";
 import * as service from "./organization.service";
 import { sendSuccess, sendCreated, sendPaginated } from "../../utils/response";
 import { ApiError } from "../../utils/apiError";
+import { requireAuthContext } from "../../utils/tenant";
+import { canGrantSystemRole } from "../../config/permissions";
+
+/** Fields that change the tenant's quota or status: platform-level only. */
+const PLATFORM_ONLY_FIELDS = ["employeeLimit", "isActive"] as const;
 
 export async function list(req: Request, res: Response): Promise<void> {
   const { items, meta } = await service.listOrganizations(req.query as Record<string, unknown>);
@@ -20,8 +25,12 @@ export async function getOne(req: Request, res: Response): Promise<void> {
 }
 
 export async function update(req: Request, res: Response): Promise<void> {
-  if (!req.auth) throw ApiError.unauthorized();
-  const org = await service.updateOrganization(req.params.id, req.body, req.auth.userId);
+  const auth = requireAuthContext(req);
+  const restricted = PLATFORM_ONLY_FIELDS.filter((field) => req.body[field] !== undefined);
+  if (restricted.length > 0 && auth.role !== "SUPER_ADMIN") {
+    throw ApiError.forbidden(`Only the platform can change: ${restricted.join(", ")}`);
+  }
+  const org = await service.updateOrganization(req.params.id, req.body, auth.userId);
   sendSuccess(res, org);
 }
 
@@ -43,8 +52,11 @@ export async function listAdmins(req: Request, res: Response): Promise<void> {
 }
 
 export async function addAdmin(req: Request, res: Response): Promise<void> {
-  if (!req.auth) throw ApiError.unauthorized();
-  const admin = await service.addAdmin(req.params.id, req.body, req.auth.userId);
+  const auth = requireAuthContext(req);
+  if (!canGrantSystemRole(auth, "ORGANIZATION_ADMIN")) {
+    throw ApiError.forbidden("You cannot create organization admins");
+  }
+  const admin = await service.addAdmin(req.params.id, req.body, auth.userId);
   sendCreated(res, admin);
 }
 

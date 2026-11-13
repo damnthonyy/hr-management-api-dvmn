@@ -82,6 +82,11 @@ describe("privilege escalation", () => {
     const delegate = await createUser("delegate", SystemRole.EMPLOYEE);
     const roleManager = await createCustomRole("Role manager", [PERMISSIONS.ROLE_MANAGE]);
     await prisma.userRole.create({ data: { userId: delegate.id, roleId: roleManager.id } });
+
+    // An employee who was delegated user:manage only.
+    const userManager = await createUser("usermgr", SystemRole.EMPLOYEE);
+    const userManagerRole = await createCustomRole("User manager", [PERMISSIONS.USER_MANAGE]);
+    await prisma.userRole.create({ data: { userId: userManager.id, roleId: userManagerRole.id } });
   });
 
   afterAll(async () => {
@@ -197,6 +202,48 @@ describe("privilege escalation", () => {
         .set(bearer(admin.token))
         .send({ userId: users.peer.id, roleId: created.body.data.id });
       expect(assigned.status).toBe(201);
+    });
+  });
+
+  describe("organization settings", () => {
+    it("an org admin cannot change its own subscription", async () => {
+      const res = await request(app)
+        .put(`/api/v1/organizations/${orgId}/subscription`)
+        .set(bearer(admin.token))
+        .send({ plan: "ENTERPRISE", status: "ACTIVE", seats: 100000 });
+      expect(res.status).toBe(403);
+    });
+
+    it.each([[{ employeeLimit: 100000 }], [{ isActive: false }]])(
+      "an org admin cannot change platform-level field %o",
+      async (body) => {
+        const res = await request(app).patch(`/api/v1/organizations/${orgId}`).set(bearer(admin.token)).send(body);
+        expect(res.status).toBe(403);
+      }
+    );
+
+    it("an org admin can still edit regular organization fields", async () => {
+      const res = await request(app)
+        .patch(`/api/v1/organizations/${orgId}`)
+        .set(bearer(admin.token))
+        .send({ timezone: "Europe/Paris" });
+      expect(res.status).toBe(200);
+    });
+
+    it("a delegated user manager cannot create organization admins", async () => {
+      const res = await request(app)
+        .post(`/api/v1/organizations/${orgId}/admins`)
+        .set(bearer(users.usermgr.token))
+        .send({ email: `sneaky-${unique}@test.example`, password, firstName: "Sneaky", lastName: "Admin" });
+      expect(res.status).toBe(403);
+    });
+
+    it("left the subscription and limits untouched", async () => {
+      const org = await prisma.organization.findUnique({ where: { id: orgId }, include: { subscription: true } });
+      expect(org?.subscription?.plan).toBe("FREE");
+      expect(org?.employeeLimit).toBe(50);
+      expect(org?.isActive).toBe(true);
+      expect(await prisma.user.count({ where: { email: `sneaky-${unique}@test.example` } })).toBe(0);
     });
   });
 });

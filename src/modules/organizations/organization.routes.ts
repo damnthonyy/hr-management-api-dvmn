@@ -41,7 +41,8 @@ router.put(
 );
 router.put(
   "/:id/subscription",
-  requireRole(SystemRole.SUPER_ADMIN, SystemRole.ORGANIZATION_ADMIN),
+  // Billing is managed by the platform, not by the tenant itself.
+  requireRole(SystemRole.SUPER_ADMIN),
   validate(updateSubscriptionSchema),
   asyncHandler(controller.updateSubscription)
 );
