@@ -24,16 +24,19 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       throw ApiError.unauthorized("Account is not active");
     }
 
-    const rolePermissions = permissionsForRole(payload.role);
+    // Role and organization come from the database, not from the token:
+    // a demotion or deactivation must take effect immediately, not when
+    // the access token expires.
+    const rolePermissions = permissionsForRole(user.systemRole);
     const customPermissions = user.roleAssignments.flatMap((assignment) =>
       assignment.role.permissions.map((rp) => rp.permission.key)
     );
 
     req.auth = {
       userId: user.id,
-      organizationId: payload.organizationId,
+      organizationId: user.organizationId,
       email: user.email,
-      role: payload.role,
+      role: user.systemRole,
       sessionId: payload.sessionId,
       permissions: Array.from(new Set([...rolePermissions, ...customPermissions])),
     };
