@@ -110,7 +110,7 @@ export async function register(input: {
   await prisma.emailVerificationToken.create({
     data: {
       userId: result.user.id,
-      token: verificationToken,
+      tokenHash: sha256(verificationToken),
       expiresAt: new Date(Date.now() + env.emailVerificationTtl * 1000),
     },
   });
@@ -267,7 +267,7 @@ export async function forgotPassword(email: string): Promise<void> {
   await prisma.passwordResetToken.create({
     data: {
       userId: user.id,
-      token,
+      tokenHash: sha256(token),
       expiresAt: new Date(Date.now() + env.passwordResetTtl * 1000),
     },
   });
@@ -284,7 +284,7 @@ export async function forgotPassword(email: string): Promise<void> {
 }
 
 export async function resetPassword(token: string, newPassword: string) {
-  const record = await prisma.passwordResetToken.findUnique({ where: { token } });
+  const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash: sha256(token) } });
   if (!record || record.usedAt) {
     throw ApiError.badRequest("Invalid or already used reset token");
   }
@@ -327,7 +327,7 @@ export async function changePassword(userId: string, currentPassword: string, ne
 }
 
 export async function verifyEmail(token: string) {
-  const record = await prisma.emailVerificationToken.findUnique({ where: { token } });
+  const record = await prisma.emailVerificationToken.findUnique({ where: { tokenHash: sha256(token) } });
   if (!record || record.usedAt) {
     throw ApiError.badRequest("Invalid verification token");
   }

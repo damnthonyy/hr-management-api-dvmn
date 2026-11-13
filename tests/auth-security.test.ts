@@ -4,6 +4,7 @@ import { createApp } from "../src/app";
 import { prisma } from "../src/lib/prisma";
 import { closeRedis, getRedis } from "../src/lib/redis";
 import { closeQueues } from "../src/queues";
+import { randomToken, sha256 } from "../src/utils/tokens";
 
 const app = createApp();
 const unique = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
@@ -68,6 +69,44 @@ describe("auth security", () => {
       expect(unknown.status).toBe(200);
       expect(known.body).toEqual(unknown.body);
       expect(JSON.stringify(known.body)).not.toMatch(/token/i);
+    });
+  });
+
+  describe("reset & verification tokens", () => {
+    it("stores only a hash of the reset token", async () => {
+      const account = await register("hash");
+      await request(app).post("/api/v1/auth/forgot-password").send({ email: account.email });
+      const rows = await prisma.passwordResetToken.findMany({ where: { userId: account.userId } });
+      expect(rows).toHaveLength(1);
+      expect(rows[0].tokenHash).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it("accepts the raw token sent by email, only once", async () => {
+      const account = await register("reset");
+      const raw = randomToken(24);
+      await prisma.passwordResetToken.create({
+        data: { userId: account.userId, tokenHash: sha256(raw), expiresAt: new Date(Date.now() + 60_000) },
+      });
+      const first = await request(app).post("/api/v1/auth/reset-password").send({ token: raw, password: "NewPassword123!" });
+      expect(first.status).toBe(200);
+      const replay = await request(app).post("/api/v1/auth/reset-password").send({ token: raw, password: "Other123456!" });
+      expect(replay.status).toBe(400);
+      // The hash itself is not a valid token.
+      const byHash = await request(app)
+        .post("/api/v1/auth/reset-password")
+        .send({ token: sha256(raw), password: "Other123456!" });
+      expect(byHash.status).toBe(400);
+    });
+
+    it("verifies emails with the raw token", async () => {
+      const account = await register("verify");
+      const raw = randomToken(24);
+      await prisma.emailVerificationToken.create({
+        data: { userId: account.userId, tokenHash: sha256(raw), expiresAt: new Date(Date.now() + 60_000) },
+      });
+      const res = await request(app).post("/api/v1/auth/verify-email").send({ token: raw });
+      expect(res.status).toBe(200);
+      expect((await prisma.user.findUnique({ where: { id: account.userId } }))?.emailVerified).toBe(true);
     });
   });
 });

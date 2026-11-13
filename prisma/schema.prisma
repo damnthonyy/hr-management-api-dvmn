@@ -130,7 +130,8 @@ model Subscription {
 model User {
   id                 String       @id @default(uuid())
   organizationId     String
-  email              String
+  /// Globally unique and stored lowercased: it is the login identifier.
+  email              String       @unique
   passwordHash       String
   firstName          String
   lastName           String
@@ -139,6 +140,7 @@ model User {
   emailVerified      Boolean      @default(false)
   lastLoginAt        DateTime?
   failedLoginCount   Int          @default(0)
+  lockedUntil        DateTime?
   mfaEnabled         Boolean      @default(false)
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
@@ -156,8 +158,6 @@ model User {
   approvedLeaves     LeaveRequest[] @relation("LeaveApprover")
   authoredReviews    PerformanceReview[] @relation("ReviewAuthor")
 
-  @@unique([organizationId, email])
-  @@index([email])
   @@index([organizationId])
   @@index([systemRole])
 }
@@ -173,6 +173,7 @@ model Session {
   revokedAt      DateTime?
 
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens  RefreshToken[]
 
   @@index([userId])
   @@index([expiresAt])
@@ -181,6 +182,7 @@ model Session {
 model RefreshToken {
   id          String    @id @default(uuid())
   userId      String
+  sessionId   String?
   tokenHash   String
   family      String    @default(uuid())
   issuedAt    DateTime  @default(now())
@@ -189,8 +191,10 @@ model RefreshToken {
   replacedBy  String?
 
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session     Session?  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([sessionId])
   @@index([tokenHash])
   @@index([family])
 }
@@ -198,7 +202,8 @@ model RefreshToken {
 model PasswordResetToken {
   id         String    @id @default(uuid())
   userId     String
-  token      String    @unique
+  /// SHA-256 of the token sent by email; the raw token is never stored.
+  tokenHash  String    @unique
   expiresAt  DateTime
   usedAt     DateTime?
   createdAt  DateTime  @default(now())
@@ -211,7 +216,8 @@ model PasswordResetToken {
 model EmailVerificationToken {
   id         String    @id @default(uuid())
   userId     String
-  token      String    @unique
+  /// SHA-256 of the token sent by email; the raw token is never stored.
+  tokenHash  String    @unique
   expiresAt  DateTime
   usedAt     DateTime?
   createdAt  DateTime  @default(now())
