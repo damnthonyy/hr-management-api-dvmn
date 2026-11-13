@@ -85,7 +85,7 @@ describe("HTTP hardening", () => {
     });
 
     it("defaults to no cross-origin access in production, and honours an explicit list", async () => {
-      const prod = await loadEnvWith({ NODE_ENV: "production", CORS_ORIGIN: undefined, ...strong });
+      const prod = await loadEnvWith({ NODE_ENV: "production", RATE_LIMIT_ENABLED: undefined, CORS_ORIGIN: undefined, ...strong });
       expect(prod.env.corsOrigins).toEqual([]);
       const list = await loadEnvWith({ CORS_ORIGIN: "https://app.example/, https://admin.example" });
       expect(list.env.corsOrigins).toEqual(["https://app.example", "https://admin.example"]);

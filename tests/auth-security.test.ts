@@ -311,7 +311,8 @@ describe("auth security", () => {
   describe("production secrets", () => {
     const loadEnvWith = async (vars: Record<string, string | undefined>) => {
       const saved = { ...process.env };
-      Object.assign(process.env, vars);
+      // Rate limiting is disabled for the test suite, which production refuses.
+      Object.assign(process.env, { RATE_LIMIT_ENABLED: "true" }, vars);
       vi.resetModules();
       try {
         return await import("../src/config/env");
