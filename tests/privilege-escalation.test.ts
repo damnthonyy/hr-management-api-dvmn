@@ -261,4 +261,102 @@ describe("privilege escalation", () => {
       expect(res.status).toBe(status);
     });
   });
+
+  describe("leave ownership", () => {
+    let leaveTypeId = "";
+    const employees: Record<string, string> = {};
+    const requests: Record<string, string> = {};
+    const today = () => new Date().toISOString();
+
+    async function linkEmployee(label: string): Promise<string> {
+      const employee = await prisma.employee.create({
+        data: {
+          organizationId: orgId,
+          userId: users[label].id,
+          employeeNumber: `EMP-${label}-${unique}`,
+          firstName: label,
+          lastName: "Employee",
+          email: users[label].email,
+          jobTitle: "Staff",
+          startDate: new Date(),
+        },
+      });
+      return employee.id;
+    }
+
+    beforeAll(async () => {
+      await createUser("worker", SystemRole.EMPLOYEE);
+      await createUser("colleague", SystemRole.EMPLOYEE);
+      await createUser("approver", SystemRole.HR_MANAGER);
+      for (const label of ["worker", "colleague", "approver"]) employees[label] = await linkEmployee(label);
+      const leaveType = await prisma.leaveType.create({
+        data: { organizationId: orgId, name: "PTO", code: `PTO-${unique}`.slice(0, 20) },
+      });
+      leaveTypeId = leaveType.id;
+      for (const label of ["colleague", "approver"]) {
+        const request = await prisma.leaveRequest.create({
+          data: {
+            organizationId: orgId,
+            employeeId: employees[label],
+            leaveTypeId,
+            startDate: new Date(),
+            endDate: new Date(),
+            days: 1,
+            status: "PENDING",
+          },
+        });
+        requests[label] = request.id;
+      }
+    });
+
+    it("an employee cannot request leave on behalf of a colleague", async () => {
+      const res = await request(app)
+        .post("/api/v1/leave/requests")
+        .set(bearer(users.worker.token))
+        .send({ employeeId: employees.colleague, leaveTypeId, startDate: today(), endDate: today() });
+      expect(res.status).toBe(403);
+    });
+
+    it("an employee can request leave for themselves", async () => {
+      const res = await request(app)
+        .post("/api/v1/leave/requests")
+        .set(bearer(users.worker.token))
+        .send({ employeeId: employees.worker, leaveTypeId, startDate: today(), endDate: today() });
+      expect(res.status).toBe(201);
+      requests.worker = res.body.data.id;
+    });
+
+    it("an employee cannot cancel a colleague's request", async () => {
+      const res = await request(app).post(`/api/v1/leave/requests/${requests.colleague}/cancel`).set(bearer(users.worker.token));
+      expect(res.status).toBe(403);
+    });
+
+    it("an approver cannot approve their own request", async () => {
+      const res = await request(app)
+        .post(`/api/v1/leave/requests/${requests.approver}/approve`)
+        .set(bearer(users.approver.token))
+        .send({});
+      expect(res.status).toBe(403);
+    });
+
+    it("an approver can approve someone else's request", async () => {
+      const res = await request(app)
+        .post(`/api/v1/leave/requests/${requests.colleague}/approve`)
+        .set(bearer(users.approver.token))
+        .send({});
+      expect(res.status).toBe(200);
+    });
+
+    it("an employee can cancel their own request, but only once", async () => {
+      const first = await request(app).post(`/api/v1/leave/requests/${requests.worker}/cancel`).set(bearer(users.worker.token));
+      expect(first.status).toBe(200);
+      const second = await request(app).post(`/api/v1/leave/requests/${requests.worker}/cancel`).set(bearer(users.worker.token));
+      expect(second.status).toBe(400);
+    });
+
+    it("left the other requests in the expected state", async () => {
+      expect((await prisma.leaveRequest.findUnique({ where: { id: requests.approver } }))?.status).toBe("PENDING");
+      expect((await prisma.leaveRequest.findUnique({ where: { id: requests.colleague } }))?.status).toBe("APPROVED");
+    });
+  });
 });

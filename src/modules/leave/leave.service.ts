@@ -5,6 +5,13 @@ import { parsePagination, buildMeta } from "../../utils/pagination";
 import { recordAudit } from "../../services/audit.service";
 import { enqueueNotification, enqueueEmail } from "../../queues";
 import { assertOrgRefs } from "../../utils/tenant";
+import { PERMISSIONS } from "../../config/permissions";
+import type { AuthContext } from "../../types/express";
+
+/** HR-level leave management, as opposed to self-service. */
+function canManageLeave(auth: AuthContext): boolean {
+  return auth.permissions.includes(PERMISSIONS.LEAVE_MANAGE);
+}
 
 function businessDays(start: Date, end: Date): number {
   const ms = end.getTime() - start.getTime();
@@ -52,15 +59,19 @@ export async function listRequests(organizationId: string, query: Record<string,
   return { items, meta: buildMeta(params, total) };
 }
 
-export async function createRequest(organizationId: string, data: {
+export async function createRequest(auth: AuthContext, data: {
   employeeId: string;
   leaveTypeId: string;
   startDate: string;
   endDate: string;
   reason?: string;
-}, actorId: string) {
+}) {
+  const { organizationId, userId: actorId } = auth;
   const employee = await prisma.employee.findUnique({ where: { id: data.employeeId, organizationId } });
   if (!employee) throw ApiError.notFound("Employee not found");
+  if (employee.userId !== actorId && !canManageLeave(auth)) {
+    throw ApiError.forbidden("You can only request leave for yourself");
+  }
   await assertOrgRefs(organizationId, { leaveType: data.leaveTypeId });
 
   const start = new Date(data.startDate);
@@ -111,12 +122,16 @@ export async function createRequest(organizationId: string, data: {
   return request;
 }
 
-export async function approveRequest(organizationId: string, id: string, approverUserId: string, note?: string) {
+export async function approveRequest(auth: AuthContext, id: string, note?: string) {
+  const { organizationId, userId: approverUserId } = auth;
   const request = await prisma.leaveRequest.findUnique({
     where: { id, organizationId },
     include: { employee: true, leaveType: true },
   });
   if (!request) throw ApiError.notFound("Leave request not found");
+  if (request.employee.userId === approverUserId) {
+    throw ApiError.forbidden("You cannot approve your own leave request");
+  }
   if (request.status !== "PENDING") {
     throw ApiError.badRequest("Only pending requests can be approved");
   }
@@ -177,9 +192,13 @@ export async function approveRequest(organizationId: string, id: string, approve
   return updated;
 }
 
-export async function rejectRequest(organizationId: string, id: string, approverUserId: string, note?: string) {
+export async function rejectRequest(auth: AuthContext, id: string, note?: string) {
+  const { organizationId, userId: approverUserId } = auth;
   const request = await prisma.leaveRequest.findUnique({ where: { id, organizationId }, include: { employee: true } });
   if (!request) throw ApiError.notFound("Leave request not found");
+  if (request.employee.userId === approverUserId) {
+    throw ApiError.forbidden("You cannot reject your own leave request");
+  }
   if (request.status !== "PENDING") {
     throw ApiError.badRequest("Only pending requests can be rejected");
   }
@@ -206,9 +225,16 @@ export async function rejectRequest(organizationId: string, id: string, approver
   return updated;
 }
 
-export async function cancelRequest(organizationId: string, id: string, actorId: string) {
-  const request = await prisma.leaveRequest.findUnique({ where: { id, organizationId } });
+export async function cancelRequest(auth: AuthContext, id: string) {
+  const { organizationId, userId: actorId } = auth;
+  const request = await prisma.leaveRequest.findUnique({ where: { id, organizationId }, include: { employee: true } });
   if (!request) throw ApiError.notFound("Leave request not found");
+  if (request.employee.userId !== actorId && !canManageLeave(auth)) {
+    throw ApiError.forbidden("You can only cancel your own leave requests");
+  }
+  if (request.status === "REJECTED" || request.status === "CANCELED") {
+    throw ApiError.badRequest("This leave request is already closed");
+  }
   const updated = await prisma.leaveRequest.update({
     where: { id, organizationId },
     data: { status: "CANCELED" },

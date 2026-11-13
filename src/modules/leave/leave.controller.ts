@@ -20,22 +20,22 @@ export async function listRequests(req: Request, res: Response): Promise<void> {
 
 export async function createRequest(req: Request, res: Response): Promise<void> {
   const auth = requireAuthContext(req);
-  sendCreated(res, await service.createRequest(auth.organizationId, req.body, auth.userId));
+  sendCreated(res, await service.createRequest(auth, req.body));
 }
 
 export async function approve(req: Request, res: Response): Promise<void> {
   const auth = requireAuthContext(req);
-  sendSuccess(res, await service.approveRequest(auth.organizationId, req.params.id, auth.userId, req.body?.decisionNote));
+  sendSuccess(res, await service.approveRequest(auth, req.params.id, req.body?.decisionNote));
 }
 
 export async function reject(req: Request, res: Response): Promise<void> {
   const auth = requireAuthContext(req);
-  sendSuccess(res, await service.rejectRequest(auth.organizationId, req.params.id, auth.userId, req.body?.decisionNote));
+  sendSuccess(res, await service.rejectRequest(auth, req.params.id, req.body?.decisionNote));
 }
 
 export async function cancel(req: Request, res: Response): Promise<void> {
   const auth = requireAuthContext(req);
-  sendSuccess(res, await service.cancelRequest(auth.organizationId, req.params.id, auth.userId));
+  sendSuccess(res, await service.cancelRequest(auth, req.params.id));
 }
 
 export async function setBalance(req: Request, res: Response): Promise<void> {
