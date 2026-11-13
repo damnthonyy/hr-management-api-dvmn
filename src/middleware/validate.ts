@@ -1,5 +1,5 @@
-import { NextFunction, Request, Response, Router } from "express";
-import { z, ZodError, type ZodType } from "zod";
+import { type NextFunction, type Request, type Response, type Router } from "express";
+import { z, type ZodError, type ZodType } from "zod";
 import { ApiError } from "../utils/apiError";
 
 export function validationError(error: ZodError): ApiError {

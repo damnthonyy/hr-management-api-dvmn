@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { type Request, type Response } from "express";
 import * as authService from "./auth.service";
 import { sendSuccess, sendCreated } from "../../utils/response";
 import { ApiError } from "../../utils/apiError";

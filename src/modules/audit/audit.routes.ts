@@ -1,9 +1,9 @@
-import { Prisma } from "@prisma/client";
+import { type Prisma } from "@prisma/client";
 import { z } from "zod";
 import { paginationQuery, uuidFilter } from "../../utils/query";
 import { parseQuery, validateIdParams } from "../../middleware/validate";
 import { Router } from "express";
-import { Request, Response } from "express";
+import { type Request, type Response } from "express";
 import { prisma } from "../../lib/prisma";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { authenticate } from "../../middleware/authenticate";

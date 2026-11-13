@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { parseBody, validateIdParams } from "../../middleware/validate";
-import { Router, Request, Response } from "express";
+import { Router, type Request, type Response } from "express";
 import * as service from "./report.service";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { authenticate } from "../../middleware/authenticate";

@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { type Request, type Response } from "express";
 import * as service from "./employee.service";
 import { parseBody, parseQuery } from "../../middleware/validate";
 import { contractSchema, createEmployeeSchema, emergencyContactSchema, listEmployeesQuery, salaryUpdateSchema, updateEmployeeSchema } from "./employee.validation";

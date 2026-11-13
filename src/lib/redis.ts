@@ -1,4 +1,4 @@
-import IORedis, { Redis } from "ioredis";
+import IORedis, { type Redis } from "ioredis";
 import { env } from "../config/env";
 
 let client: Redis | null = null;

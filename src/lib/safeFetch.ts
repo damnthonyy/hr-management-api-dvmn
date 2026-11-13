@@ -116,7 +116,7 @@ export function safeLookup(hostname: string, options: LookupOptions, callback: L
       callback(error, []);
       return;
     }
-    const list = addresses as LookupAddress[];
+    const list = addresses;
     if (list.length === 0 || list.some((entry) => !isPublicAddress(entry.address))) {
       callback(new UnsafeUrlError("Destination address is not allowed"), []);
       return;
@@ -164,7 +164,7 @@ export async function fetchRemoteFile(rawUrl: string, options: { maxBytes: numbe
       throw error;
     }
 
-    const location = response.headers.location;
+    const location: unknown = response.headers.location;
     if (response.status >= 300 && response.status < 400 && typeof location === "string") {
       url = assertSafeUrl(new URL(location, url).toString());
       continue;

@@ -1,8 +1,8 @@
 import fs from "fs";
 import path from "path";
-import { Worker, Job } from "bullmq";
+import { Worker, type Job } from "bullmq";
 import { bullConnection } from "../lib/redis";
-import { QUEUE_NAMES, PayslipJob } from "../queues";
+import { QUEUE_NAMES, type PayslipJob } from "../queues";
 import { prisma } from "../lib/prisma";
 import { payslipsDir, ensureStorage } from "../lib/storage";
 import { logger } from "../lib/logger";

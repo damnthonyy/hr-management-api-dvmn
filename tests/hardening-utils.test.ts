@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll, vi } from "vitest";
-import express, { NextFunction, Request, Response } from "express";
+import express, { type NextFunction, type Request, type Response } from "express";
 import request from "supertest";
 import { renderTemplate } from "../src/services/mailer";
 import { numericCode } from "../src/utils/tokens";

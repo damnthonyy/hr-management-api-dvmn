@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { type Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { parsePagination, buildMeta, parseSort } from "../../utils/pagination";

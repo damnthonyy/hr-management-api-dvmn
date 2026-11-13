@@ -1,4 +1,4 @@
-import { Worker } from "bullmq";
+import { type Worker } from "bullmq";
 import { logger } from "../lib/logger";
 import { connectPrisma, disconnectPrisma } from "../lib/prisma";
 import { closeRedis } from "../lib/redis";
@@ -41,7 +41,7 @@ async function bootstrap(): Promise<void> {
   installShutdownHandlers(shutdown, logger);
 }
 
-bootstrap().catch((error) => {
+bootstrap().catch((error: unknown) => {
   logger.error({ err: error }, "failed to start workers");
   process.exit(1);
 });

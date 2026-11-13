@@ -46,6 +46,8 @@ export function sanitizeFileName(name: string, fallback = "document"): string {
   const base = name.split(/[\\/]/).pop() ?? "";
   const cleaned = base
     .normalize("NFC")
+    // Control characters are what this removes (header/log injection).
+    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f"<>:|?*]/g, "")
     .replace(/\s+/g, " ")
     .replace(/^[.\s]+/, "")

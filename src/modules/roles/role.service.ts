@@ -1,6 +1,6 @@
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
-import { SystemRole } from "@prisma/client";
+import { type SystemRole } from "@prisma/client";
 import {
   ALL_PERMISSIONS,
   canGrantSystemRole,

@@ -1,4 +1,4 @@
-import { NextFunction, Request, Response } from "express";
+import { type NextFunction, type Request, type Response } from "express";
 import { Prisma } from "@prisma/client";
 import multer from "multer";
 import { ApiError } from "../utils/apiError";

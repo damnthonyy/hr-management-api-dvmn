@@ -1,6 +1,6 @@
-import { Worker, Job } from "bullmq";
+import { Worker, type Job } from "bullmq";
 import { bullConnection } from "../lib/redis";
-import { QUEUE_NAMES, ReportJob } from "../queues";
+import { QUEUE_NAMES, type ReportJob } from "../queues";
 import * as reportService from "../modules/reports/report.service";
 import { createNotification, toJson } from "../services/notification.service";
 import { logger } from "../lib/logger";

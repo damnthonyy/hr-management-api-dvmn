@@ -1,6 +1,6 @@
 import jwt, { type SignOptions, type VerifyOptions } from "jsonwebtoken";
 import { env } from "../config/env";
-import { SystemRole } from "@prisma/client";
+import { type SystemRole } from "@prisma/client";
 
 export interface AccessTokenPayload {
   sub: string;
@@ -30,11 +30,11 @@ function decode(token: string, secret: string): Record<string, unknown> {
   if (typeof payload !== "object" || payload === null) {
     throw new jwt.JsonWebTokenError("invalid token payload");
   }
-  return payload as Record<string, unknown>;
+  return payload;
 }
 
 function hasStrings(value: Record<string, unknown>, keys: string[]): boolean {
-  return keys.every((key) => typeof value[key] === "string" && (value[key] as string).length > 0);
+  return keys.every((key) => typeof value[key] === "string" && (value[key]).length > 0);
 }
 
 export function signAccessToken(payload: Omit<AccessTokenPayload, "type">): string {

@@ -1,7 +1,7 @@
-import { NextFunction, Request, Response } from "express";
+import { type NextFunction, type Request, type Response } from "express";
 import { SystemRole } from "@prisma/client";
 import { ApiError } from "../utils/apiError";
-import { PermissionKey } from "../config/permissions";
+import { type PermissionKey } from "../config/permissions";
 
 
 // logic for checking authentication and authorization in Express routes

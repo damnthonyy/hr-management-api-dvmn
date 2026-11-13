@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { Prisma } from "@prisma/client";
+import { type Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { fileExists, removeFile, resolveStoragePath, sanitizeFileName, sha256File, uploadsDir } from "../../lib/storage";

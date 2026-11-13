@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { type Request, type Response } from "express";
 import * as service from "./department.service";
 import { parseBody, parseQuery } from "../../middleware/validate";
 import { assignEmployeeSchema, assignManagerSchema, createDepartmentSchema, createTeamSchema, listDepartmentsQuery, listTeamsQuery, teamMemberSchema, transferEmployeeSchema, updateDepartmentSchema, updateTeamSchema } from "./department.validation";

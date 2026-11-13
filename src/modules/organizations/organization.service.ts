@@ -1,4 +1,4 @@
-import { Prisma, SystemRole } from "@prisma/client";
+import { type Prisma, SystemRole } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { slugify } from "../../utils/slug";

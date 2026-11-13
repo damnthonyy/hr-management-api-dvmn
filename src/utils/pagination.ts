@@ -1,4 +1,4 @@
-import { PaginationMeta } from "./response";
+import { type PaginationMeta } from "./response";
 
 export interface PageParams {
   page: number;
@@ -13,7 +13,7 @@ export const MAX_PAGE_SIZE = 100;
 export const MAX_PAGE = 10_000;
 
 function clampInt(raw: unknown, fallback: number, min: number, max: number): number {
-  const parsed = Number.parseInt(String(raw ?? ""), 10);
+  const parsed = typeof raw === "string" || typeof raw === "number" ? Number.parseInt(String(raw), 10) : Number.NaN;
   if (Number.isNaN(parsed)) return fallback;
   return Math.min(max, Math.max(min, parsed));
 }

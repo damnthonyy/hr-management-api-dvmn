@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { type Request, type Response } from "express";
 import { assignRoleSchema, createRoleSchema, setSystemRoleSchema, updateRoleSchema } from "./role.validation";
 import { parseBody } from "../../middleware/validate";
 import * as service from "./role.service";

@@ -7,11 +7,10 @@ export interface OutboundEmail {
   html: string;
 }
 
-export async function deliverEmail(message: OutboundEmail): Promise<void> {
-  logger.info(
-    { to: message.to, subject: message.subject, from: env.smtpFrom },
-    "email dispatched"
-  );
+/** Stub transport: logs instead of sending. Async to match a real transport. */
+export function deliverEmail(message: OutboundEmail): Promise<void> {
+  logger.info({ to: message.to, subject: message.subject, from: env.smtpFrom }, "email dispatched");
+  return Promise.resolve();
 }
 
 const HTML_ESCAPES: Record<string, string> = {
@@ -22,8 +21,15 @@ const HTML_ESCAPES: Record<string, string> = {
   "'": "&#39;",
 };
 
+function toText(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") return value.toString();
+  return JSON.stringify(value) ?? "";
+}
+
 export function escapeHtml(value: unknown): string {
-  return String(value ?? "").replace(/[&<>"']/g, (char) => HTML_ESCAPES[char]);
+  return toText(value).replace(/[&<>"']/g, (char) => HTML_ESCAPES[char]);
 }
 
 /**

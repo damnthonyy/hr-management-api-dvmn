@@ -1,4 +1,4 @@
-import { Queue, JobsOptions } from "bullmq";
+import { Queue, type JobsOptions } from "bullmq";
 import { bullConnection } from "../lib/redis";
 
 export const QUEUE_NAMES = {

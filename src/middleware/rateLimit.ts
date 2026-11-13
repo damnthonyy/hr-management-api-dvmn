@@ -1,4 +1,4 @@
-import { NextFunction, Request, Response } from "express";
+import { type NextFunction, type Request, type Response } from "express";
 import { getRedis } from "../lib/redis";
 import { logger } from "../lib/logger";
 import { env } from "../config/env";
@@ -44,9 +44,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
         clearTimeout(timer);
         resolve(value);
       },
-      (error) => {
+      (error: unknown) => {
         clearTimeout(timer);
-        reject(error);
+        reject(error instanceof Error ? error : new Error(String(error)));
       }
     );
   });

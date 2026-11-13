@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { type Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { parsePagination, buildMeta } from "../../utils/pagination";
@@ -184,7 +184,7 @@ export async function approveRequest(auth: AuthContext, id: string, note?: strin
       userId: request.employee.userId,
       type: "leave.approved",
       title: "Leave approved",
-      body: `Your leave request for ${request.days} day(s) was approved`,
+      body: `Your leave request for ${request.days.toString()} day(s) was approved`,
       data: { requestId: id },
     });
     await enqueueEmail({

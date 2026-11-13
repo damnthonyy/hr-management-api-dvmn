@@ -33,7 +33,7 @@ async function bootstrap(): Promise<void> {
   installShutdownHandlers(shutdown, logger);
 }
 
-bootstrap().catch((error) => {
+bootstrap().catch((error: unknown) => {
   logger.error({ err: error }, "failed to start server");
   process.exit(1);
 });

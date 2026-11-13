@@ -1,6 +1,6 @@
-import { Worker, Job } from "bullmq";
+import { Worker, type Job } from "bullmq";
 import { bullConnection } from "../lib/redis";
-import { QUEUE_NAMES, InvitationJob, enqueueEmail } from "../queues";
+import { QUEUE_NAMES, type InvitationJob, enqueueEmail } from "../queues";
 import { prisma } from "../lib/prisma";
 import { env } from "../config/env";
 import { randomToken } from "../utils/tokens";

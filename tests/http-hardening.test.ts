@@ -202,7 +202,7 @@ describe("HTTP hardening", () => {
     });
 
     it("fails open quickly when Redis does not answer", async () => {
-      vi.spyOn(getRedis(), "eval").mockReturnValue(new Promise(() => undefined) as never);
+      vi.spyOn(getRedis(), "eval").mockReturnValue(new Promise(() => undefined));
       const started = Date.now();
       const res = await request(app).post("/api/v1/auth/forgot-password").send({ email: `slow-${unique}@test.example` });
       expect(res.status).toBe(200);

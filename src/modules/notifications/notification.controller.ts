@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { type Request, type Response } from "express";
 import * as service from "./notification.service";
 import { parseBody, parseQuery } from "../../middleware/validate";
 import { inviteSchema, listNotificationsQuery } from "./notification.validation";

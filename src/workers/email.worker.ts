@@ -1,6 +1,6 @@
-import { Worker, Job } from "bullmq";
+import { Worker, type Job } from "bullmq";
 import { bullConnection } from "../lib/redis";
-import { QUEUE_NAMES, EmailJob } from "../queues";
+import { QUEUE_NAMES, type EmailJob } from "../queues";
 import { deliverEmail, renderTemplate } from "../services/mailer";
 import { logger } from "../lib/logger";
 

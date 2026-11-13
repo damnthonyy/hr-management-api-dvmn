@@ -1,4 +1,4 @@
-import { Prisma, SystemRole, User } from "@prisma/client";
+import { type Prisma, SystemRole, type User } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { env } from "../../config/env";
 import { ApiError } from "../../utils/apiError";
