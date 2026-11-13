@@ -1,7 +1,7 @@
 import { Worker, Job } from "bullmq";
 import { bullConnection } from "../lib/redis";
 import { QUEUE_NAMES, ScheduledNotificationJob } from "../queues";
-import { createNotification } from "../services/notification.service";
+import { createNotification, toJson } from "../services/notification.service";
 import { logger } from "../lib/logger";
 
 export function createNotificationWorker(): Worker {
@@ -14,7 +14,7 @@ export function createNotificationWorker(): Worker {
         type: job.data.type,
         title: job.data.title,
         body: job.data.body,
-        data: (job.data.data ?? {}) as never,
+        data: toJson(job.data.data),
       });
       return { delivered: true };
     },

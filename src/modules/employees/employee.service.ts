@@ -5,7 +5,16 @@ import { parsePagination, buildMeta, parseSort } from "../../utils/pagination";
 import { randomToken } from "../../utils/tokens";
 import { recordAudit } from "../../services/audit.service";
 import { assertOrgRefs } from "../../utils/tenant";
-import type { ListEmployeesQuery } from "./employee.validation";
+import type {
+  ContractInput,
+  CreateEmployeeInput,
+  EmergencyContactInput,
+  ListEmployeesQuery,
+  SalaryUpdateInput,
+  UpdateEmployeeInput,
+} from "./employee.validation";
+
+const toDate = (value: string | undefined) => (value ? new Date(value) : undefined);
 
 /** Loads an employee of the given organization or throws 404. */
 async function findEmployeeInOrg(organizationId: string, id: string) {
@@ -71,7 +80,7 @@ export async function getEmployee(organizationId: string, id: string) {
   return employee;
 }
 
-export async function createEmployee(organizationId: string, data: Record<string, unknown>, actorId: string) {
+export async function createEmployee(organizationId: string, data: CreateEmployeeInput, actorId: string) {
   const organization = await prisma.organization.findUnique({
     where: { id: organizationId },
     select: { employeeLimit: true, _count: { select: { employees: true } } },
@@ -81,32 +90,31 @@ export async function createEmployee(organizationId: string, data: Record<string
     throw ApiError.unprocessable("Organization employee limit reached");
   }
   await assertOrgRefs(organizationId, {
-    department: data.departmentId as string | undefined,
-    team: data.teamId as string | undefined,
-    employee: data.managerId as string | undefined,
+    department: data.departmentId,
+    team: data.teamId,
+    employee: data.managerId,
   });
 
-  const employeeNumber =
-    (data.employeeNumber as string) ?? `EMP-${randomToken(4).toUpperCase()}`;
+  const employeeNumber = data.employeeNumber ?? `EMP-${randomToken(4).toUpperCase()}`;
 
   const employee = await prisma.employee.create({
     data: {
       organizationId,
       employeeNumber,
-      firstName: data.firstName as string,
-      lastName: data.lastName as string,
-      email: data.email as string,
-      phone: (data.phone as string) ?? null,
-      dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth as string) : null,
-      nationalId: (data.nationalId as string) ?? null,
-      address: (data.address as string) ?? null,
-      jobTitle: data.jobTitle as string,
-      departmentId: (data.departmentId as string) ?? null,
-      teamId: (data.teamId as string) ?? null,
-      managerId: (data.managerId as string) ?? null,
-      startDate: new Date(data.startDate as string),
-      baseSalary: (data.baseSalary as number) ?? 0,
-      currency: (data.currency as string) ?? "USD",
+      firstName: data.firstName,
+      lastName: data.lastName,
+      email: data.email,
+      phone: data.phone ?? null,
+      dateOfBirth: toDate(data.dateOfBirth) ?? null,
+      nationalId: data.nationalId ?? null,
+      address: data.address ?? null,
+      jobTitle: data.jobTitle,
+      departmentId: data.departmentId ?? null,
+      teamId: data.teamId ?? null,
+      managerId: data.managerId ?? null,
+      startDate: new Date(data.startDate),
+      baseSalary: data.baseSalary ?? 0,
+      currency: data.currency ?? "USD",
     },
   });
 
@@ -124,24 +132,28 @@ export async function createEmployee(organizationId: string, data: Record<string
 export async function updateEmployee(
   organizationId: string,
   id: string,
-  data: Record<string, unknown>,
+  data: UpdateEmployeeInput,
   actorId: string
 ) {
   const existing = await findEmployeeInOrg(organizationId, id);
   await assertOrgRefs(organizationId, {
-    department: data.departmentId as string | undefined,
-    team: data.teamId as string | undefined,
-    employee: data.managerId as string | undefined,
+    department: data.departmentId,
+    team: data.teamId,
+    employee: data.managerId,
   });
 
-  const payload: Record<string, unknown> = { ...data };
-  if (data.startDate) payload.startDate = new Date(data.startDate as string);
-  if (data.dateOfBirth) payload.dateOfBirth = new Date(data.dateOfBirth as string);
-  if (data.terminationDate) payload.terminationDate = new Date(data.terminationDate as string);
+  // Relations are set through their scalar ids (unchecked input), which
+  // assertOrgRefs validated above.
+  const payload: Prisma.EmployeeUncheckedUpdateInput = {
+    ...data,
+    startDate: toDate(data.startDate),
+    dateOfBirth: toDate(data.dateOfBirth),
+    terminationDate: toDate(data.terminationDate),
+  };
 
   const employee = await prisma.employee.update({
     where: { id, organizationId },
-    data: payload as Prisma.EmployeeUpdateInput,
+    data: payload,
   });
 
   await recordAudit({
@@ -150,7 +162,7 @@ export async function updateEmployee(
     action: "employee.updated",
     entityType: "Employee",
     entityId: id,
-    metadata: data as Prisma.InputJsonValue,
+    metadata: data,
   });
 
   return employee;
@@ -188,16 +200,16 @@ export async function deleteEmployee(organizationId: string, id: string, actorId
 export async function addEmergencyContact(
   organizationId: string,
   employeeId: string,
-  data: Record<string, unknown>
+  data: EmergencyContactInput
 ) {
   await findEmployeeInOrg(organizationId, employeeId);
   return prisma.emergencyContact.create({
     data: {
       employeeId,
-      name: data.name as string,
-      relationship: data.relationship as string,
-      phone: data.phone as string,
-      email: (data.email as string) ?? null,
+      name: data.name,
+      relationship: data.relationship,
+      phone: data.phone,
+      email: data.email ?? null,
     },
   });
 }
@@ -210,20 +222,20 @@ export async function listEmergencyContacts(organizationId: string, employeeId: 
 export async function addContract(
   organizationId: string,
   employeeId: string,
-  data: Record<string, unknown>,
+  data: ContractInput,
   actorId: string
 ) {
   await findEmployeeInOrg(organizationId, employeeId);
   const contract = await prisma.employmentContract.create({
     data: {
       employeeId,
-      contractType: data.contractType as never,
-      title: data.title as string,
-      startDate: new Date(data.startDate as string),
-      endDate: data.endDate ? new Date(data.endDate as string) : null,
-      salary: data.salary as number,
-      currency: (data.currency as string) ?? "USD",
-      weeklyHours: (data.weeklyHours as number) ?? 40,
+      contractType: data.contractType,
+      title: data.title,
+      startDate: new Date(data.startDate),
+      endDate: toDate(data.endDate) ?? null,
+      salary: data.salary,
+      currency: data.currency ?? "USD",
+      weeklyHours: data.weeklyHours ?? 40,
     },
   });
   await recordAudit({
@@ -241,11 +253,7 @@ export async function listContracts(organizationId: string, employeeId: string) 
   return prisma.employmentContract.findMany({ where: { employeeId }, orderBy: { startDate: "desc" } });
 }
 
-export async function updateSalary(organizationId: string, employeeId: string, data: {
-  newSalary: number;
-  reason?: string;
-  effectiveAt?: string;
-}, actorId: string) {
+export async function updateSalary(organizationId: string, employeeId: string, data: SalaryUpdateInput, actorId: string) {
   const employee = await findEmployeeInOrg(organizationId, employeeId);
 
   const result = await prisma.$transaction(async (tx) => {

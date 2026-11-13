@@ -2,7 +2,14 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { parsePagination, buildMeta } from "../../utils/pagination";
-import type { ListDepartmentsQuery, ListTeamsQuery } from "./department.validation";
+import type {
+  CreateDepartmentInput,
+  CreateTeamInput,
+  ListDepartmentsQuery,
+  ListTeamsQuery,
+  UpdateDepartmentInput,
+  UpdateTeamInput,
+} from "./department.validation";
 import { recordAudit } from "../../services/audit.service";
 import { assertOrgRefs } from "../../utils/tenant";
 
@@ -58,19 +65,16 @@ export async function getDepartment(organizationId: string, id: string) {
   return department;
 }
 
-export async function createDepartment(organizationId: string, data: Record<string, unknown>, actorId: string) {
-  await assertOrgRefs(organizationId, {
-    department: data.parentId as string | undefined,
-    employee: data.managerId as string | undefined,
-  });
+export async function createDepartment(organizationId: string, data: CreateDepartmentInput, actorId: string) {
+  await assertOrgRefs(organizationId, { department: data.parentId, employee: data.managerId });
   const department = await prisma.department.create({
     data: {
       organizationId,
-      name: data.name as string,
-      code: data.code as string,
-      description: (data.description as string) ?? null,
-      parentId: (data.parentId as string) ?? null,
-      managerId: (data.managerId as string) ?? null,
+      name: data.name,
+      code: data.code,
+      description: data.description ?? null,
+      parentId: data.parentId ?? null,
+      managerId: data.managerId ?? null,
     },
   });
   await recordAudit({
@@ -86,14 +90,11 @@ export async function createDepartment(organizationId: string, data: Record<stri
 export async function updateDepartment(
   organizationId: string,
   id: string,
-  data: Record<string, unknown>,
+  data: UpdateDepartmentInput,
   actorId: string
 ) {
   await findDepartmentInOrg(organizationId, id);
-  await assertOrgRefs(organizationId, {
-    department: data.parentId as string | undefined,
-    employee: data.managerId as string | undefined,
-  });
+  await assertOrgRefs(organizationId, { department: data.parentId, employee: data.managerId });
   const department = await prisma.department.update({ where: { id, organizationId }, data });
   await recordAudit({
     organizationId,
@@ -181,24 +182,21 @@ export async function listTeams(organizationId: string, query: ListTeamsQuery) {
   });
 }
 
-export async function createTeam(organizationId: string, data: Record<string, unknown>) {
-  await assertOrgRefs(organizationId, {
-    department: data.departmentId as string,
-    employee: data.leadId as string | undefined,
-  });
+export async function createTeam(organizationId: string, data: CreateTeamInput) {
+  await assertOrgRefs(organizationId, { department: data.departmentId, employee: data.leadId });
   return prisma.team.create({
     data: {
       organizationId,
-      departmentId: data.departmentId as string,
-      name: data.name as string,
-      leadId: (data.leadId as string) ?? null,
+      departmentId: data.departmentId,
+      name: data.name,
+      leadId: data.leadId ?? null,
     },
   });
 }
 
-export async function updateTeam(organizationId: string, id: string, data: Record<string, unknown>) {
+export async function updateTeam(organizationId: string, id: string, data: UpdateTeamInput) {
   await findTeamInOrg(organizationId, id);
-  await assertOrgRefs(organizationId, { employee: data.leadId as string | undefined });
+  await assertOrgRefs(organizationId, { employee: data.leadId });
   return prisma.team.update({ where: { id, organizationId }, data });
 }
 

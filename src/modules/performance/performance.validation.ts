@@ -40,3 +40,6 @@ export const updateObjectiveSchema = z.object({
 
 export const listReviewsQuery = z.object({ ...paginationQuery, cycleId: uuidFilter, employeeId: uuidFilter });
 export type ListReviewsQuery = z.infer<typeof listReviewsQuery>;
+
+export type UpdateReviewInput = z.infer<typeof updateReviewSchema>;
+export type UpdateObjectiveInput = z.infer<typeof updateObjectiveSchema>;

@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { parsePagination, buildMeta } from "../../utils/pagination";
-import type { CalendarQuery, ListLeaveRequestsQuery } from "./leave.validation";
+import type { CalendarQuery, CreateLeaveTypeInput, ListLeaveRequestsQuery } from "./leave.validation";
 import { recordAudit } from "../../services/audit.service";
 import { enqueueNotification, enqueueEmail } from "../../queues";
 import { assertOrgRefs } from "../../utils/tenant";
@@ -24,15 +24,15 @@ export async function listLeaveTypes(organizationId: string) {
   return prisma.leaveType.findMany({ where: { organizationId }, orderBy: { name: "asc" } });
 }
 
-export async function createLeaveType(organizationId: string, data: Record<string, unknown>) {
+export async function createLeaveType(organizationId: string, data: CreateLeaveTypeInput) {
   return prisma.leaveType.create({
     data: {
       organizationId,
-      name: data.name as string,
-      code: data.code as string,
-      defaultDays: (data.defaultDays as number) ?? 0,
-      paid: (data.paid as boolean) ?? true,
-      requiresApproval: (data.requiresApproval as boolean) ?? true,
+      name: data.name,
+      code: data.code,
+      defaultDays: data.defaultDays ?? 0,
+      paid: data.paid ?? true,
+      requiresApproval: data.requiresApproval ?? true,
     },
   });
 }

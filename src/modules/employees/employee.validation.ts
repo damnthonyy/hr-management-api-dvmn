@@ -58,3 +58,9 @@ export const listEmployeesQuery = z.object({
   search: searchFilter,
 });
 export type ListEmployeesQuery = z.infer<typeof listEmployeesQuery>;
+
+export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;
+export type UpdateEmployeeInput = z.infer<typeof updateEmployeeSchema>;
+export type EmergencyContactInput = z.infer<typeof emergencyContactSchema>;
+export type ContractInput = z.infer<typeof contractSchema>;
+export type SalaryUpdateInput = z.infer<typeof salaryUpdateSchema>;

@@ -42,3 +42,5 @@ export const addAdminSchema = z.object({
 
 export const listOrganizationsQuery = z.object({ ...paginationQuery, search: searchFilter });
 export type ListOrganizationsQuery = z.infer<typeof listOrganizationsQuery>;
+
+export type UpdateSubscriptionInput = z.infer<typeof updateSubscriptionSchema>;

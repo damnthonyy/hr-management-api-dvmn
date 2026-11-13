@@ -10,6 +10,14 @@ export interface CreateNotificationInput {
   data?: Prisma.InputJsonValue;
 }
 
+/**
+ * Converts any serializable value (Decimal, Date...) to plain JSON, as it
+ * will be stored and returned anyway.
+ */
+export function toJson(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
+}
+
 export async function createNotification(input: CreateNotificationInput) {
   return prisma.notification.create({
     data: {

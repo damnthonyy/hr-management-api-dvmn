@@ -2,7 +2,7 @@ import { Worker, Job } from "bullmq";
 import { bullConnection } from "../lib/redis";
 import { QUEUE_NAMES, ReportJob } from "../queues";
 import * as reportService from "../modules/reports/report.service";
-import { createNotification } from "../services/notification.service";
+import { createNotification, toJson } from "../services/notification.service";
 import { logger } from "../lib/logger";
 
 export function createReportWorker(): Worker {
@@ -32,7 +32,7 @@ export function createReportWorker(): Worker {
         userId: requestedBy,
         type: "report.ready",
         title: `Report ready: ${reportType}`,
-        data: payload as never,
+        data: toJson(payload),
       });
 
       return { generated: true };

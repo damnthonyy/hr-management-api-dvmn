@@ -40,3 +40,5 @@ export const calendarQuery = z
   .object({ from: dateFilter.optional(), to: dateFilter.optional() })
   .refine((value) => !value.from || !value.to || value.from <= value.to, { message: "from must be before to", path: ["to"] });
 export type CalendarQuery = z.infer<typeof calendarQuery>;
+
+export type CreateLeaveTypeInput = z.infer<typeof createLeaveTypeSchema>;

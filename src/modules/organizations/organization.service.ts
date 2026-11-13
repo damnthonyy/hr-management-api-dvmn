@@ -7,7 +7,7 @@ import { hashPassword } from "../../utils/password";
 import { parsePagination, buildMeta } from "../../utils/pagination";
 import { recordAudit } from "../../services/audit.service";
 import { cacheGet, cacheSet, cacheDelete } from "../../services/cache";
-import type { ListOrganizationsQuery } from "./organization.validation";
+import type { ListOrganizationsQuery, UpdateSubscriptionInput } from "./organization.validation";
 
 export async function listOrganizations(query: ListOrganizationsQuery) {
   const params = parsePagination(query);
@@ -107,17 +107,12 @@ export async function updateSettings(id: string, settings: Record<string, unknow
   return organization;
 }
 
-export async function updateSubscription(id: string, data: {
-  plan?: string;
-  status?: string;
-  seats?: number;
-  renewsAt?: string;
-}, actorId: string) {
+export async function updateSubscription(id: string, data: UpdateSubscriptionInput, actorId: string) {
   const subscription = await prisma.subscription.update({
     where: { organizationId: id },
     data: {
-      plan: data.plan as never,
-      status: data.status as never,
+      plan: data.plan,
+      status: data.status,
       seats: data.seats,
       renewsAt: data.renewsAt ? new Date(data.renewsAt) : undefined,
     },

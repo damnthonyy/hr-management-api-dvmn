@@ -44,3 +44,8 @@ export type ListDepartmentsQuery = z.infer<typeof listDepartmentsQuery>;
 
 export const listTeamsQuery = z.object({ departmentId: uuidFilter });
 export type ListTeamsQuery = z.infer<typeof listTeamsQuery>;
+
+export type CreateDepartmentInput = z.infer<typeof createDepartmentSchema>;
+export type UpdateDepartmentInput = z.infer<typeof updateDepartmentSchema>;
+export type CreateTeamInput = z.infer<typeof createTeamSchema>;
+export type UpdateTeamInput = z.infer<typeof updateTeamSchema>;

@@ -4,7 +4,7 @@ import { ApiError } from "../../utils/apiError";
 import { recordAudit } from "../../services/audit.service";
 import { assertOrgRefs } from "../../utils/tenant";
 import { buildMeta, parsePagination } from "../../utils/pagination";
-import type { ListReviewsQuery } from "./performance.validation";
+import type { ListReviewsQuery, UpdateObjectiveInput, UpdateReviewInput } from "./performance.validation";
 
 /** Reviews and objectives have no organizationId column: scope through the employee. */
 async function assertReviewInOrg(organizationId: string, id: string): Promise<void> {
@@ -91,9 +91,9 @@ export async function createReview(organizationId: string, data: {
   return review;
 }
 
-export async function updateReview(organizationId: string, id: string, data: Record<string, unknown>) {
+export async function updateReview(organizationId: string, id: string, data: UpdateReviewInput) {
   await assertReviewInOrg(organizationId, id);
-  const payload: Record<string, unknown> = { ...data };
+  const payload: Prisma.PerformanceReviewUpdateInput = { ...data };
   if (data.status === "SUBMITTED") payload.submittedAt = new Date();
   return prisma.performanceReview.update({ where: { id }, data: payload });
 }
@@ -131,7 +131,7 @@ export async function createObjective(organizationId: string, data: {
   });
 }
 
-export async function updateObjective(organizationId: string, id: string, data: Record<string, unknown>) {
+export async function updateObjective(organizationId: string, id: string, data: UpdateObjectiveInput) {
   await assertObjectiveInOrg(organizationId, id);
   return prisma.objective.update({ where: { id }, data });
 }
