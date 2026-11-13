@@ -49,6 +49,8 @@ export interface ReportJob {
   organizationId: string;
   reportType: string;
   requestedBy: string;
+  /** Whether the requester holds salary:view (checked when the job is queued). */
+  includeSalary: boolean;
   params: Record<string, unknown>;
 }
 

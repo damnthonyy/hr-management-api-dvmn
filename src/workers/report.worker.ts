@@ -9,10 +9,12 @@ export function createReportWorker(): Worker {
   return new Worker(
     QUEUE_NAMES.report,
     async (job: Job<ReportJob>) => {
-      const { organizationId, reportType, requestedBy } = job.data;
+      const { organizationId, reportType, requestedBy, includeSalary = false } = job.data;
       let payload: unknown;
       switch (reportType) {
         case "salary-summary":
+          // Jobs queued before includeSalary existed are not trusted with salary data.
+          if (!includeSalary) throw new Error("salary report requested without salary:view");
           payload = await reportService.salarySummary(organizationId);
           break;
         case "turnover":
@@ -22,7 +24,7 @@ export function createReportWorker(): Worker {
           payload = await reportService.leaveStatistics(organizationId);
           break;
         default:
-          payload = await reportService.dashboard(organizationId);
+          payload = await reportService.dashboard(organizationId, includeSalary);
       }
 
       await createNotification({

@@ -76,13 +76,14 @@ export async function turnover(organizationId: string) {
   return { hired, terminated, active, turnoverRate: rate };
 }
 
-export async function dashboard(organizationId: string) {
+/** The salary summary is only included for callers with salary:view. */
+export async function dashboard(organizationId: string, includeSalary: boolean) {
   const [employees, departments, pendingLeaves, openReviews, salary] = await Promise.all([
     prisma.employee.count({ where: { organizationId } }),
     prisma.department.count({ where: { organizationId } }),
     prisma.leaveRequest.count({ where: { organizationId, status: "PENDING" } }),
     prisma.performanceReview.count({ where: { employee: { organizationId }, status: { not: "FINALIZED" } } }),
-    salarySummary(organizationId),
+    includeSalary ? salarySummary(organizationId) : Promise.resolve(undefined),
   ]);
   return { employees, departments, pendingLeaves, openReviews, salary };
 }

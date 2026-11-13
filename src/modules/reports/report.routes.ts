@@ -1,4 +1,5 @@
-import { validateIdParams } from "../../middleware/validate";
+import { z } from "zod";
+import { validate, validateIdParams } from "../../middleware/validate";
 import { Router, Request, Response } from "express";
 import * as service from "./report.service";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -38,16 +39,28 @@ router.get("/turnover", asyncHandler(async (req: Request, res: Response) => {
 }));
 
 router.get("/dashboard", asyncHandler(async (req: Request, res: Response) => {
-  sendSuccess(res, await service.dashboard(orgId(req)));
+  const includeSalary = Boolean(req.auth?.permissions.includes(PERMISSIONS.SALARY_VIEW));
+  sendSuccess(res, await service.dashboard(orgId(req), includeSalary));
 }));
 
-router.post("/export", asyncHandler(async (req: Request, res: Response) => {
+const exportSchema = z.object({
+  reportType: z.enum(["dashboard", "salary-summary", "turnover", "leave"]).default("dashboard"),
+  params: z.record(z.string(), z.unknown()).default({}),
+});
+
+router.post("/export", validate(exportSchema), asyncHandler(async (req: Request, res: Response) => {
   if (!req.auth) throw ApiError.unauthorized();
+  const body = req.body as z.infer<typeof exportSchema>;
+  const includeSalary = req.auth.permissions.includes(PERMISSIONS.SALARY_VIEW);
+  if (body.reportType === "salary-summary" && !includeSalary) {
+    throw ApiError.forbidden("The salary report requires the salary:view permission");
+  }
   await enqueueReport({
     organizationId: req.auth.organizationId,
-    reportType: String(req.body?.reportType ?? "dashboard"),
+    reportType: body.reportType,
     requestedBy: req.auth.userId,
-    params: (req.body?.params as Record<string, unknown>) ?? {},
+    includeSalary,
+    params: body.params,
   });
   sendSuccess(res, { queued: true });
 }));

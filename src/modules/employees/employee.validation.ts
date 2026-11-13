@@ -19,7 +19,9 @@ export const createEmployeeSchema = z.object({
   employeeNumber: z.string().max(40).optional(),
 });
 
-export const updateEmployeeSchema = createEmployeeSchema.partial().extend({
+// Salary changes go through POST /employees/:id/salary (salary:manage, with
+// history): baseSalary and currency cannot be changed here.
+export const updateEmployeeSchema = createEmployeeSchema.omit({ baseSalary: true, currency: true }).partial().extend({
   status: z.enum(["ACTIVE", "ON_LEAVE", "SUSPENDED", "TERMINATED"]).optional(),
   terminationDate: z.iso.datetime().optional(),
 });
