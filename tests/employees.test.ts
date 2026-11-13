@@ -16,13 +16,15 @@ let employeeId = "";
 describe("employee lifecycle", () => {
   beforeAll(async () => {
     await prisma.$connect();
-    const res = await request(app).post("/api/v1/auth/register").send({
-      organizationName: `Emp Org ${unique}`,
-      email,
-      password,
-      firstName: "HR",
-      lastName: "Lead",
-    });
+    const res = await request(app)
+      .post("/api/v1/auth/register")
+      .send({
+        organizationName: `Emp Org ${unique}`,
+        email,
+        password,
+        firstName: "HR",
+        lastName: "Lead",
+      });
     token = res.body.data.tokens.accessToken;
   });
 
@@ -53,18 +55,14 @@ describe("employee lifecycle", () => {
   });
 
   it("lists employees with pagination meta", async () => {
-    const res = await request(app)
-      .get("/api/v1/employees?page=1&pageSize=10")
-      .set("Authorization", `Bearer ${token}`);
+    const res = await request(app).get("/api/v1/employees?page=1&pageSize=10").set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.meta).toBeDefined();
     expect(Array.isArray(res.body.data)).toBe(true);
   });
 
   it("fetches a single employee", async () => {
-    const res = await request(app)
-      .get(`/api/v1/employees/${employeeId}`)
-      .set("Authorization", `Bearer ${token}`);
+    const res = await request(app).get(`/api/v1/employees/${employeeId}`).set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.data.firstName).toBe("Jane");
   });

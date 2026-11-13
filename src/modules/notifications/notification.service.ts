@@ -1,12 +1,14 @@
+import { type Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { parsePagination, buildMeta } from "../../utils/pagination";
 import { enqueueInvitation } from "../../queues";
+import type { ListNotificationsQuery } from "./notification.validation";
 
-export async function listForUser(userId: string, query: Record<string, unknown>) {
+export async function listForUser(userId: string, query: ListNotificationsQuery) {
   const params = parsePagination(query);
-  const where: Record<string, unknown> = { userId };
-  if (query.status === "UNREAD" || query.status === "READ") where.status = query.status;
+  const where: Prisma.NotificationWhereInput = { userId };
+  if (query.status) where.status = query.status;
   const [items, total] = await Promise.all([
     prisma.notification.findMany({
       where,
@@ -25,10 +27,10 @@ export async function unreadCount(userId: string) {
 }
 
 export async function markRead(id: string, userId: string) {
-  const notification = await prisma.notification.findUnique({ where: { id } });
+  const notification = await prisma.notification.findUnique({ where: { id, userId } });
   if (!notification) throw ApiError.notFound("Notification not found");
   return prisma.notification.update({
-    where: { id },
+    where: { id, userId },
     data: { status: "READ", readAt: new Date() },
   });
 }

@@ -1,15 +1,16 @@
 import { z } from "zod";
+import { accountEmail } from "../../utils/schemas";
 
 export const registerSchema = z.object({
   organizationName: z.string().min(2).max(120),
-  email: z.string().email(),
+  email: accountEmail(),
   password: z.string().min(8).max(128),
   firstName: z.string().min(1).max(80),
   lastName: z.string().min(1).max(80),
 });
 
 export const loginSchema = z.object({
-  email: z.string().email(),
+  email: accountEmail(),
   password: z.string().min(1),
 });
 
@@ -22,7 +23,7 @@ export const logoutSchema = z.object({
 });
 
 export const forgotPasswordSchema = z.object({
-  email: z.string().email(),
+  email: accountEmail(),
 });
 
 export const resetPasswordSchema = z.object({
@@ -42,7 +43,9 @@ export const verifyEmailSchema = z.object({
 export const updateProfileSchema = z.object({
   firstName: z.string().min(1).max(80).optional(),
   lastName: z.string().min(1).max(80).optional(),
-  email: z.string().email().optional(),
+  email: accountEmail().optional(),
+  /** Required when `email` changes. */
+  currentPassword: z.string().min(1).max(128).optional(),
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;

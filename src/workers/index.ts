@@ -1,4 +1,4 @@
-import { Worker } from "bullmq";
+import { type Worker } from "bullmq";
 import { logger } from "../lib/logger";
 import { connectPrisma, disconnectPrisma } from "../lib/prisma";
 import { closeRedis } from "../lib/redis";
@@ -8,6 +8,8 @@ import { createDocumentWorker } from "./document.worker";
 import { createReportWorker } from "./report.worker";
 import { createInvitationWorker } from "./invitation.worker";
 import { createNotificationWorker } from "./notification.worker";
+import { createShutdown, installShutdownHandlers } from "../lib/shutdown";
+import { closeQueues } from "../queues";
 
 async function bootstrap(): Promise<void> {
   await connectPrisma();
@@ -24,19 +26,22 @@ async function bootstrap(): Promise<void> {
 
   logger.info(`started ${workers.length} background workers`);
 
-  const shutdown = async (signal: string): Promise<void> => {
-    logger.info(`received ${signal}, stopping workers`);
-    await Promise.all(workers.map((w) => w.close()));
-    await disconnectPrisma().catch(() => undefined);
-    await closeRedis().catch(() => undefined);
-    process.exit(0);
-  };
-
-  process.on("SIGTERM", () => void shutdown("SIGTERM"));
-  process.on("SIGINT", () => void shutdown("SIGINT"));
+  // Workers finish their active jobs before closing; jobs still running at
+  // the deadline are retried by BullMQ once their lock expires.
+  const shutdown = createShutdown({
+    logger,
+    timeoutMs: 30_000,
+    steps: [
+      { name: "workers", run: () => Promise.all(workers.map((worker) => worker.close())) },
+      { name: "queues", run: closeQueues },
+      { name: "database", run: disconnectPrisma },
+      { name: "redis", run: closeRedis },
+    ],
+  });
+  installShutdownHandlers(shutdown, logger);
 }
 
-bootstrap().catch((error) => {
+bootstrap().catch((error: unknown) => {
   logger.error({ err: error }, "failed to start workers");
   process.exit(1);
 });

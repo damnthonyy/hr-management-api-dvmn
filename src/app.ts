@@ -1,4 +1,4 @@
-import express, { Application, Request, Response } from "express";
+import express, { type Application, type Request, type Response } from "express";
 import helmet from "helmet";
 import cors from "cors";
 import pinoHttp from "pino-http";
@@ -10,18 +10,20 @@ import { errorHandler, notFoundHandler } from "./middleware/error";
 import apiRoutes from "./routes";
 import { prisma } from "./lib/prisma";
 import { pingRedis } from "./lib/redis";
+import { isShuttingDown } from "./lib/shutdown";
 
 export function createApp(): Application {
   const app = express();
 
   app.disable("x-powered-by");
-  app.set("trust proxy", true);
+  app.set("trust proxy", env.trustProxy);
 
   app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
   app.use(
     cors({
-      origin: env.corsOrigin === "*" ? true : env.corsOrigin.split(","),
-      credentials: true,
+      origin: env.corsOrigins === "*" ? "*" : env.corsOrigins,
+      credentials: false,
+      exposedHeaders: ["X-Request-Id", "X-RateLimit-Limit", "X-RateLimit-Remaining", "Retry-After"],
     })
   );
   app.use(express.json({ limit: "5mb" }));
@@ -38,6 +40,10 @@ export function createApp(): Application {
   app.use(rateLimit());
 
   app.get("/health", async (_req: Request, res: Response) => {
+    if (isShuttingDown()) {
+      res.status(503).json({ success: false, data: { status: "shutting_down" } });
+      return;
+    }
     const checks: Record<string, string> = {};
     try {
       await prisma.$queryRaw`SELECT 1`;

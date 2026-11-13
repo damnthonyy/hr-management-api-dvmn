@@ -1,84 +1,92 @@
-import { Request, Response } from "express";
+import { type Request, type Response } from "express";
 import * as service from "./department.service";
+import { parseBody, parseQuery } from "../../middleware/validate";
+import {
+  assignEmployeeSchema,
+  assignManagerSchema,
+  createDepartmentSchema,
+  createTeamSchema,
+  listDepartmentsQuery,
+  listTeamsQuery,
+  teamMemberSchema,
+  transferEmployeeSchema,
+  updateDepartmentSchema,
+  updateTeamSchema,
+} from "./department.validation";
 import { sendSuccess, sendCreated, sendPaginated, sendNoContent } from "../../utils/response";
-import { ApiError } from "../../utils/apiError";
-
-function orgId(req: Request): string {
-  if (!req.auth) throw ApiError.unauthorized();
-  return req.auth.organizationId;
-}
+import { requireAuthContext, requireOrgId } from "../../utils/tenant";
 
 export async function list(req: Request, res: Response): Promise<void> {
-  const { items, meta } = await service.listDepartments(orgId(req), req.query as Record<string, unknown>);
+  const { items, meta } = await service.listDepartments(requireOrgId(req), parseQuery(req, listDepartmentsQuery));
   sendPaginated(res, items, meta);
 }
 
 export async function getOne(req: Request, res: Response): Promise<void> {
-  const department = await service.getDepartment(req.params.id);
-  sendSuccess(res, department);
+  sendSuccess(res, await service.getDepartment(requireOrgId(req), req.params.id));
 }
 
 export async function create(req: Request, res: Response): Promise<void> {
-  if (!req.auth) throw ApiError.unauthorized();
-  const department = await service.createDepartment(orgId(req), req.body, req.auth.userId);
-  sendCreated(res, department);
+  const body = parseBody(req, createDepartmentSchema);
+  const auth = requireAuthContext(req);
+  sendCreated(res, await service.createDepartment(auth.organizationId, body, auth.userId));
 }
 
 export async function update(req: Request, res: Response): Promise<void> {
-  if (!req.auth) throw ApiError.unauthorized();
-  const department = await service.updateDepartment(req.params.id, req.body, req.auth.userId);
-  sendSuccess(res, department);
+  const body = parseBody(req, updateDepartmentSchema);
+  const auth = requireAuthContext(req);
+  sendSuccess(res, await service.updateDepartment(auth.organizationId, req.params.id, body, auth.userId));
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {
-  if (!req.auth) throw ApiError.unauthorized();
-  await service.deleteDepartment(req.params.id, req.auth.userId);
+  const auth = requireAuthContext(req);
+  await service.deleteDepartment(auth.organizationId, req.params.id, auth.userId);
   sendNoContent(res);
 }
 
 export async function assignManager(req: Request, res: Response): Promise<void> {
-  if (!req.auth) throw ApiError.unauthorized();
-  const department = await service.assignManager(req.params.id, req.body.managerId, req.auth.userId);
-  sendSuccess(res, department);
+  const body = parseBody(req, assignManagerSchema);
+  const auth = requireAuthContext(req);
+  sendSuccess(res, await service.assignManager(auth.organizationId, req.params.id, body.managerId, auth.userId));
 }
 
 export async function assignEmployee(req: Request, res: Response): Promise<void> {
-  const employee = await service.assignEmployee(req.params.id, req.body.employeeId);
-  sendSuccess(res, employee);
+  const body = parseBody(req, assignEmployeeSchema);
+  sendSuccess(res, await service.assignEmployee(requireOrgId(req), req.params.id, body.employeeId));
 }
 
 export async function transferEmployee(req: Request, res: Response): Promise<void> {
-  if (!req.auth) throw ApiError.unauthorized();
-  const employee = await service.transferEmployee(req.body.employeeId, req.body.targetDepartmentId, req.auth.userId);
-  sendSuccess(res, employee);
+  const body = parseBody(req, transferEmployeeSchema);
+  const auth = requireAuthContext(req);
+  sendSuccess(
+    res,
+    await service.transferEmployee(auth.organizationId, body.employeeId, body.targetDepartmentId, auth.userId)
+  );
 }
 
 export async function listTeams(req: Request, res: Response): Promise<void> {
-  const teams = await service.listTeams(orgId(req), req.query as Record<string, unknown>);
-  sendSuccess(res, teams);
+  sendSuccess(res, await service.listTeams(requireOrgId(req), parseQuery(req, listTeamsQuery)));
 }
 
 export async function createTeam(req: Request, res: Response): Promise<void> {
-  const team = await service.createTeam(orgId(req), req.body);
-  sendCreated(res, team);
+  const body = parseBody(req, createTeamSchema);
+  sendCreated(res, await service.createTeam(requireOrgId(req), body));
 }
 
 export async function updateTeam(req: Request, res: Response): Promise<void> {
-  const team = await service.updateTeam(req.params.teamId, req.body);
-  sendSuccess(res, team);
+  const body = parseBody(req, updateTeamSchema);
+  sendSuccess(res, await service.updateTeam(requireOrgId(req), req.params.teamId, body));
 }
 
 export async function removeTeam(req: Request, res: Response): Promise<void> {
-  await service.deleteTeam(req.params.teamId);
+  await service.deleteTeam(requireOrgId(req), req.params.teamId);
   sendNoContent(res);
 }
 
 export async function addTeamMember(req: Request, res: Response): Promise<void> {
-  const member = await service.addTeamMember(req.params.teamId, req.body.employeeId);
-  sendSuccess(res, member);
+  const body = parseBody(req, teamMemberSchema);
+  sendSuccess(res, await service.addTeamMember(requireOrgId(req), req.params.teamId, body.employeeId));
 }
 
 export async function removeTeamMember(req: Request, res: Response): Promise<void> {
-  const member = await service.removeTeamMember(req.params.employeeId);
-  sendSuccess(res, member);
+  sendSuccess(res, await service.removeTeamMember(requireOrgId(req), req.params.employeeId));
 }

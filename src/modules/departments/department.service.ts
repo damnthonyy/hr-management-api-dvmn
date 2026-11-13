@@ -1,9 +1,37 @@
+import { type Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { parsePagination, buildMeta } from "../../utils/pagination";
+import type {
+  CreateDepartmentInput,
+  CreateTeamInput,
+  ListDepartmentsQuery,
+  ListTeamsQuery,
+  UpdateDepartmentInput,
+  UpdateTeamInput,
+} from "./department.validation";
 import { recordAudit } from "../../services/audit.service";
+import { assertOrgRefs } from "../../utils/tenant";
 
-export async function listDepartments(organizationId: string, query: Record<string, unknown>) {
+async function findDepartmentInOrg(organizationId: string, id: string) {
+  const department = await prisma.department.findUnique({ where: { id, organizationId } });
+  if (!department) throw ApiError.notFound("Department not found");
+  return department;
+}
+
+async function findTeamInOrg(organizationId: string, id: string) {
+  const team = await prisma.team.findUnique({ where: { id, organizationId } });
+  if (!team) throw ApiError.notFound("Team not found");
+  return team;
+}
+
+async function findEmployeeInOrg(organizationId: string, id: string) {
+  const employee = await prisma.employee.findUnique({ where: { id, organizationId } });
+  if (!employee) throw ApiError.notFound("Employee not found");
+  return employee;
+}
+
+export async function listDepartments(organizationId: string, query: ListDepartmentsQuery) {
   const params = parsePagination(query);
   const [items, total] = await Promise.all([
     prisma.department.findMany({
@@ -22,14 +50,19 @@ export async function listDepartments(organizationId: string, query: Record<stri
   return { items, meta: buildMeta(params, total) };
 }
 
-export async function getDepartment(id: string) {
+export async function getDepartment(organizationId: string, id: string) {
   const department = await prisma.department.findUnique({
-    where: { id },
+    where: { id, organizationId },
     include: {
       manager: true,
       parent: true,
       children: true,
-      teams: { include: { lead: { select: { id: true, firstName: true, lastName: true } }, _count: { select: { members: true } } } },
+      teams: {
+        include: {
+          lead: { select: { id: true, firstName: true, lastName: true } },
+          _count: { select: { members: true } },
+        },
+      },
       employees: { select: { id: true, firstName: true, lastName: true, jobTitle: true, status: true } },
     },
   });
@@ -37,15 +70,16 @@ export async function getDepartment(id: string) {
   return department;
 }
 
-export async function createDepartment(organizationId: string, data: Record<string, unknown>, actorId: string) {
+export async function createDepartment(organizationId: string, data: CreateDepartmentInput, actorId: string) {
+  await assertOrgRefs(organizationId, { department: data.parentId, employee: data.managerId });
   const department = await prisma.department.create({
     data: {
       organizationId,
-      name: data.name as string,
-      code: data.code as string,
-      description: (data.description as string) ?? null,
-      parentId: (data.parentId as string) ?? null,
-      managerId: (data.managerId as string) ?? null,
+      name: data.name,
+      code: data.code,
+      description: data.description ?? null,
+      parentId: data.parentId ?? null,
+      managerId: data.managerId ?? null,
     },
   });
   await recordAudit({
@@ -58,12 +92,17 @@ export async function createDepartment(organizationId: string, data: Record<stri
   return department;
 }
 
-export async function updateDepartment(id: string, data: Record<string, unknown>, actorId: string) {
-  const existing = await prisma.department.findUnique({ where: { id } });
-  if (!existing) throw ApiError.notFound("Department not found");
-  const department = await prisma.department.update({ where: { id }, data });
+export async function updateDepartment(
+  organizationId: string,
+  id: string,
+  data: UpdateDepartmentInput,
+  actorId: string
+) {
+  await findDepartmentInOrg(organizationId, id);
+  await assertOrgRefs(organizationId, { department: data.parentId, employee: data.managerId });
+  const department = await prisma.department.update({ where: { id, organizationId }, data });
   await recordAudit({
-    organizationId: existing.organizationId,
+    organizationId,
     userId: actorId,
     action: "department.updated",
     entityType: "Department",
@@ -72,12 +111,11 @@ export async function updateDepartment(id: string, data: Record<string, unknown>
   return department;
 }
 
-export async function deleteDepartment(id: string, actorId: string) {
-  const existing = await prisma.department.findUnique({ where: { id } });
-  if (!existing) throw ApiError.notFound("Department not found");
-  await prisma.department.delete({ where: { id } });
+export async function deleteDepartment(organizationId: string, id: string, actorId: string) {
+  await findDepartmentInOrg(organizationId, id);
+  await prisma.department.delete({ where: { id, organizationId } });
   await recordAudit({
-    organizationId: existing.organizationId,
+    organizationId,
     userId: actorId,
     action: "department.deleted",
     entityType: "Department",
@@ -86,13 +124,15 @@ export async function deleteDepartment(id: string, actorId: string) {
   return { ok: true };
 }
 
-export async function assignManager(id: string, managerId: string, actorId: string) {
+export async function assignManager(organizationId: string, id: string, managerId: string, actorId: string) {
+  await findDepartmentInOrg(organizationId, id);
+  await assertOrgRefs(organizationId, { employee: managerId });
   const department = await prisma.department.update({
-    where: { id },
+    where: { id, organizationId },
     data: { managerId },
   });
   await recordAudit({
-    organizationId: department.organizationId,
+    organizationId,
     userId: actorId,
     action: "department.manager_assigned",
     entityType: "Department",
@@ -102,22 +142,29 @@ export async function assignManager(id: string, managerId: string, actorId: stri
   return department;
 }
 
-export async function assignEmployee(id: string, employeeId: string) {
+export async function assignEmployee(organizationId: string, id: string, employeeId: string) {
+  await findDepartmentInOrg(organizationId, id);
+  await findEmployeeInOrg(organizationId, employeeId);
   return prisma.employee.update({
-    where: { id: employeeId },
+    where: { id: employeeId, organizationId },
     data: { departmentId: id },
   });
 }
 
-export async function transferEmployee(employeeId: string, targetDepartmentId: string, actorId: string) {
-  const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
-  if (!employee) throw ApiError.notFound("Employee not found");
+export async function transferEmployee(
+  organizationId: string,
+  employeeId: string,
+  targetDepartmentId: string,
+  actorId: string
+) {
+  const employee = await findEmployeeInOrg(organizationId, employeeId);
+  await findDepartmentInOrg(organizationId, targetDepartmentId);
   const updated = await prisma.employee.update({
-    where: { id: employeeId },
+    where: { id: employeeId, organizationId },
     data: { departmentId: targetDepartmentId },
   });
   await recordAudit({
-    organizationId: employee.organizationId,
+    organizationId,
     userId: actorId,
     action: "employee.transferred",
     entityType: "Employee",
@@ -127,9 +174,9 @@ export async function transferEmployee(employeeId: string, targetDepartmentId: s
   return updated;
 }
 
-export async function listTeams(organizationId: string, query: Record<string, unknown>) {
-  const where = { organizationId } as Record<string, unknown>;
-  if (typeof query.departmentId === "string") where.departmentId = query.departmentId;
+export async function listTeams(organizationId: string, query: ListTeamsQuery) {
+  const where: Prisma.TeamWhereInput = { organizationId };
+  if (query.departmentId) where.departmentId = query.departmentId;
   return prisma.team.findMany({
     where,
     include: {
@@ -140,30 +187,37 @@ export async function listTeams(organizationId: string, query: Record<string, un
   });
 }
 
-export async function createTeam(organizationId: string, data: Record<string, unknown>) {
+export async function createTeam(organizationId: string, data: CreateTeamInput) {
+  await assertOrgRefs(organizationId, { department: data.departmentId, employee: data.leadId });
   return prisma.team.create({
     data: {
       organizationId,
-      departmentId: data.departmentId as string,
-      name: data.name as string,
-      leadId: (data.leadId as string) ?? null,
+      departmentId: data.departmentId,
+      name: data.name,
+      leadId: data.leadId ?? null,
     },
   });
 }
 
-export async function updateTeam(id: string, data: Record<string, unknown>) {
-  return prisma.team.update({ where: { id }, data });
+export async function updateTeam(organizationId: string, id: string, data: UpdateTeamInput) {
+  await findTeamInOrg(organizationId, id);
+  await assertOrgRefs(organizationId, { employee: data.leadId });
+  return prisma.team.update({ where: { id, organizationId }, data });
 }
 
-export async function deleteTeam(id: string) {
-  await prisma.team.delete({ where: { id } });
+export async function deleteTeam(organizationId: string, id: string) {
+  await findTeamInOrg(organizationId, id);
+  await prisma.team.delete({ where: { id, organizationId } });
   return { ok: true };
 }
 
-export async function addTeamMember(teamId: string, employeeId: string) {
-  return prisma.employee.update({ where: { id: employeeId }, data: { teamId } });
+export async function addTeamMember(organizationId: string, teamId: string, employeeId: string) {
+  await findTeamInOrg(organizationId, teamId);
+  await findEmployeeInOrg(organizationId, employeeId);
+  return prisma.employee.update({ where: { id: employeeId, organizationId }, data: { teamId } });
 }
 
-export async function removeTeamMember(employeeId: string) {
-  return prisma.employee.update({ where: { id: employeeId }, data: { teamId: null } });
+export async function removeTeamMember(organizationId: string, employeeId: string) {
+  await findEmployeeInOrg(organizationId, employeeId);
+  return prisma.employee.update({ where: { id: employeeId, organizationId }, data: { teamId: null } });
 }

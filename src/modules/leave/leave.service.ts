@@ -1,9 +1,18 @@
-import { Prisma } from "@prisma/client";
+import { type Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { parsePagination, buildMeta } from "../../utils/pagination";
+import type { CalendarQuery, CreateLeaveTypeInput, ListLeaveRequestsQuery } from "./leave.validation";
 import { recordAudit } from "../../services/audit.service";
 import { enqueueNotification, enqueueEmail } from "../../queues";
+import { assertOrgRefs } from "../../utils/tenant";
+import { PERMISSIONS } from "../../config/permissions";
+import type { AuthContext } from "../../types/express";
+
+/** HR-level leave management, as opposed to self-service. */
+function canManageLeave(auth: AuthContext): boolean {
+  return auth.permissions.includes(PERMISSIONS.LEAVE_MANAGE);
+}
 
 function businessDays(start: Date, end: Date): number {
   const ms = end.getTime() - start.getTime();
@@ -15,24 +24,24 @@ export async function listLeaveTypes(organizationId: string) {
   return prisma.leaveType.findMany({ where: { organizationId }, orderBy: { name: "asc" } });
 }
 
-export async function createLeaveType(organizationId: string, data: Record<string, unknown>) {
+export async function createLeaveType(organizationId: string, data: CreateLeaveTypeInput) {
   return prisma.leaveType.create({
     data: {
       organizationId,
-      name: data.name as string,
-      code: data.code as string,
-      defaultDays: (data.defaultDays as number) ?? 0,
-      paid: (data.paid as boolean) ?? true,
-      requiresApproval: (data.requiresApproval as boolean) ?? true,
+      name: data.name,
+      code: data.code,
+      defaultDays: data.defaultDays ?? 0,
+      paid: data.paid ?? true,
+      requiresApproval: data.requiresApproval ?? true,
     },
   });
 }
 
-export async function listRequests(organizationId: string, query: Record<string, unknown>) {
+export async function listRequests(organizationId: string, query: ListLeaveRequestsQuery) {
   const params = parsePagination(query);
   const where: Prisma.LeaveRequestWhereInput = { organizationId };
-  if (typeof query.status === "string") where.status = query.status as never;
-  if (typeof query.employeeId === "string") where.employeeId = query.employeeId;
+  if (query.status) where.status = query.status;
+  if (query.employeeId) where.employeeId = query.employeeId;
 
   const [items, total] = await Promise.all([
     prisma.leaveRequest.findMany({
@@ -51,15 +60,23 @@ export async function listRequests(organizationId: string, query: Record<string,
   return { items, meta: buildMeta(params, total) };
 }
 
-export async function createRequest(organizationId: string, data: {
-  employeeId: string;
-  leaveTypeId: string;
-  startDate: string;
-  endDate: string;
-  reason?: string;
-}, actorId: string) {
-  const employee = await prisma.employee.findUnique({ where: { id: data.employeeId } });
+export async function createRequest(
+  auth: AuthContext,
+  data: {
+    employeeId: string;
+    leaveTypeId: string;
+    startDate: string;
+    endDate: string;
+    reason?: string;
+  }
+) {
+  const { organizationId, userId: actorId } = auth;
+  const employee = await prisma.employee.findUnique({ where: { id: data.employeeId, organizationId } });
   if (!employee) throw ApiError.notFound("Employee not found");
+  if (employee.userId !== actorId && !canManageLeave(auth)) {
+    throw ApiError.forbidden("You can only request leave for yourself");
+  }
+  await assertOrgRefs(organizationId, { leaveType: data.leaveTypeId });
 
   const start = new Date(data.startDate);
   const end = new Date(data.endDate);
@@ -83,7 +100,7 @@ export async function createRequest(organizationId: string, data: {
 
   if (employee.managerId) {
     const managerUser = await prisma.employee.findUnique({
-      where: { id: employee.managerId },
+      where: { id: employee.managerId, organizationId },
       select: { userId: true },
     });
     if (managerUser?.userId) {
@@ -109,43 +126,60 @@ export async function createRequest(organizationId: string, data: {
   return request;
 }
 
-export async function approveRequest(id: string, approverUserId: string, note?: string) {
+/** Moves a PENDING request to its decision, or throws 409 if it was decided in the meantime. */
+async function claimPendingRequest(
+  tx: Prisma.TransactionClient,
+  id: string,
+  organizationId: string,
+  data: Prisma.LeaveRequestUncheckedUpdateManyInput
+): Promise<void> {
+  const claimed = await tx.leaveRequest.updateMany({ where: { id, organizationId, status: "PENDING" }, data });
+  if (claimed.count === 0) throw ApiError.conflict("This leave request has already been decided");
+}
+
+/** Adds (or, with a negative value, gives back) used days on the balance of the request's year, if any. */
+async function adjustBalance(
+  tx: Prisma.TransactionClient,
+  request: { employeeId: string; leaveTypeId: string; startDate: Date },
+  days: Prisma.Decimal
+): Promise<void> {
+  await tx.leaveBalance.updateMany({
+    where: {
+      employeeId: request.employeeId,
+      leaveTypeId: request.leaveTypeId,
+      year: request.startDate.getFullYear(),
+    },
+    data: { usedDays: { increment: days } },
+  });
+}
+
+export async function approveRequest(auth: AuthContext, id: string, note?: string) {
+  const { organizationId, userId: approverUserId } = auth;
   const request = await prisma.leaveRequest.findUnique({
-    where: { id },
+    where: { id, organizationId },
     include: { employee: true, leaveType: true },
   });
   if (!request) throw ApiError.notFound("Leave request not found");
+  if (request.employee.userId === approverUserId) {
+    throw ApiError.forbidden("You cannot approve your own leave request");
+  }
   if (request.status !== "PENDING") {
     throw ApiError.badRequest("Only pending requests can be approved");
   }
 
-  const year = request.startDate.getFullYear();
-  const balance = await prisma.leaveBalance.findUnique({
-    where: {
-      employeeId_leaveTypeId_year: {
-        employeeId: request.employeeId,
-        leaveTypeId: request.leaveTypeId,
-        year,
-      },
-    },
-  });
-
-  const updated = await prisma.leaveRequest.update({
-    where: { id },
-    data: {
+  // The status change is conditional on PENDING and the balance is debited
+  // in the same transaction: two concurrent approvals no longer debit the
+  // balance twice.
+  const updated = await prisma.$transaction(async (tx) => {
+    await claimPendingRequest(tx, id, organizationId, {
       status: "APPROVED",
       approverId: approverUserId,
       decidedAt: new Date(),
       decisionNote: note ?? null,
-    },
-  });
-
-  if (balance) {
-    await prisma.leaveBalance.update({
-      where: { id: balance.id },
-      data: { usedDays: { increment: request.days } },
     });
-  }
+    await adjustBalance(tx, request, request.days);
+    return tx.leaveRequest.findUniqueOrThrow({ where: { id } });
+  });
 
   if (request.employee.userId) {
     await enqueueNotification({
@@ -153,7 +187,7 @@ export async function approveRequest(id: string, approverUserId: string, note?: 
       userId: request.employee.userId,
       type: "leave.approved",
       title: "Leave approved",
-      body: `Your leave request for ${request.days} day(s) was approved`,
+      body: `Your leave request for ${request.days.toString()} day(s) was approved`,
       data: { requestId: id },
     });
     await enqueueEmail({
@@ -175,15 +209,24 @@ export async function approveRequest(id: string, approverUserId: string, note?: 
   return updated;
 }
 
-export async function rejectRequest(id: string, approverUserId: string, note?: string) {
-  const request = await prisma.leaveRequest.findUnique({ where: { id }, include: { employee: true } });
+export async function rejectRequest(auth: AuthContext, id: string, note?: string) {
+  const { organizationId, userId: approverUserId } = auth;
+  const request = await prisma.leaveRequest.findUnique({ where: { id, organizationId }, include: { employee: true } });
   if (!request) throw ApiError.notFound("Leave request not found");
+  if (request.employee.userId === approverUserId) {
+    throw ApiError.forbidden("You cannot reject your own leave request");
+  }
   if (request.status !== "PENDING") {
     throw ApiError.badRequest("Only pending requests can be rejected");
   }
-  const updated = await prisma.leaveRequest.update({
-    where: { id },
-    data: { status: "REJECTED", approverId: approverUserId, decidedAt: new Date(), decisionNote: note ?? null },
+  const updated = await prisma.$transaction(async (tx) => {
+    await claimPendingRequest(tx, id, organizationId, {
+      status: "REJECTED",
+      approverId: approverUserId,
+      decidedAt: new Date(),
+      decisionNote: note ?? null,
+    });
+    return tx.leaveRequest.findUniqueOrThrow({ where: { id } });
   });
   if (request.employee.userId) {
     await enqueueNotification({
@@ -204,12 +247,27 @@ export async function rejectRequest(id: string, approverUserId: string, note?: s
   return updated;
 }
 
-export async function cancelRequest(id: string, actorId: string) {
-  const request = await prisma.leaveRequest.findUnique({ where: { id } });
+export async function cancelRequest(auth: AuthContext, id: string) {
+  const { organizationId, userId: actorId } = auth;
+  const request = await prisma.leaveRequest.findUnique({ where: { id, organizationId }, include: { employee: true } });
   if (!request) throw ApiError.notFound("Leave request not found");
-  const updated = await prisma.leaveRequest.update({
-    where: { id },
-    data: { status: "CANCELED" },
+  if (request.employee.userId !== actorId && !canManageLeave(auth)) {
+    throw ApiError.forbidden("You can only cancel your own leave requests");
+  }
+  if (request.status === "REJECTED" || request.status === "CANCELED") {
+    throw ApiError.badRequest("This leave request is already closed");
+  }
+  // Cancelling an approved request gives the days back to the balance. The
+  // update is conditional on the status read above, so a concurrent decision
+  // makes this call fail (409) instead of using a stale status.
+  const updated = await prisma.$transaction(async (tx) => {
+    const moved = await tx.leaveRequest.updateMany({
+      where: { id, organizationId, status: request.status },
+      data: { status: "CANCELED" },
+    });
+    if (moved.count === 0) throw ApiError.conflict("This leave request was modified concurrently, please retry");
+    if (request.status === "APPROVED") await adjustBalance(tx, request, request.days.negated());
+    return tx.leaveRequest.findUniqueOrThrow({ where: { id } });
   });
   await recordAudit({
     organizationId: request.organizationId,
@@ -221,12 +279,16 @@ export async function cancelRequest(id: string, actorId: string) {
   return updated;
 }
 
-export async function setBalance(data: {
-  employeeId: string;
-  leaveTypeId: string;
-  year: number;
-  entitledDays: number;
-}) {
+export async function setBalance(
+  organizationId: string,
+  data: {
+    employeeId: string;
+    leaveTypeId: string;
+    year: number;
+    entitledDays: number;
+  }
+) {
+  await assertOrgRefs(organizationId, { employee: data.employeeId, leaveType: data.leaveTypeId });
   return prisma.leaveBalance.upsert({
     where: {
       employeeId_leaveTypeId_year: {
@@ -245,26 +307,30 @@ export async function setBalance(data: {
   });
 }
 
-export async function listBalances(employeeId: string) {
+export async function listBalances(organizationId: string, employeeId: string) {
+  await assertOrgRefs(organizationId, { employee: employeeId });
   return prisma.leaveBalance.findMany({
     where: { employeeId },
     include: { leaveType: true },
   });
 }
 
-export async function employeeHistory(employeeId: string) {
+export async function employeeHistory(organizationId: string, employeeId: string) {
+  await assertOrgRefs(organizationId, { employee: employeeId });
   return prisma.leaveRequest.findMany({
-    where: { employeeId },
+    where: { employeeId, organizationId },
     include: { leaveType: true },
     orderBy: { startDate: "desc" },
   });
 }
 
-export async function departmentCalendar(departmentId: string, query: Record<string, unknown>) {
-  const from = typeof query.from === "string" ? new Date(query.from) : new Date();
-  const to = typeof query.to === "string" ? new Date(query.to) : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+export async function departmentCalendar(organizationId: string, departmentId: string, query: CalendarQuery) {
+  await assertOrgRefs(organizationId, { department: departmentId });
+  const from = query.from ?? new Date();
+  const to = query.to ?? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
   return prisma.leaveRequest.findMany({
     where: {
+      organizationId,
       status: "APPROVED",
       employee: { departmentId },
       startDate: { lte: to },

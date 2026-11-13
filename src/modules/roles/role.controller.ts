@@ -1,12 +1,11 @@
-import { Request, Response } from "express";
+import { type Request, type Response } from "express";
+import { assignRoleSchema, createRoleSchema, setSystemRoleSchema, updateRoleSchema } from "./role.validation";
+import { parseBody } from "../../middleware/validate";
 import * as service from "./role.service";
 import { sendSuccess, sendCreated, sendNoContent } from "../../utils/response";
-import { ApiError } from "../../utils/apiError";
+import { requireAuthContext, requireOrgId } from "../../utils/tenant";
 
-function orgId(req: Request): string {
-  if (!req.auth) throw ApiError.unauthorized();
-  return req.auth.organizationId;
-}
+const orgId = requireOrgId;
 
 export async function listPermissions(_req: Request, res: Response): Promise<void> {
   const permissions = await service.listPermissions();
@@ -19,37 +18,41 @@ export async function listRoles(req: Request, res: Response): Promise<void> {
 }
 
 export async function createRole(req: Request, res: Response): Promise<void> {
-  if (!req.auth) throw ApiError.unauthorized();
-  const role = await service.createRole(orgId(req), req.body, req.auth.userId);
+  const body = parseBody(req, createRoleSchema);
+  const auth = requireAuthContext(req);
+  const role = await service.createRole(auth, body);
   sendCreated(res, role);
 }
 
 export async function updateRole(req: Request, res: Response): Promise<void> {
-  if (!req.auth) throw ApiError.unauthorized();
-  const role = await service.updateRole(req.params.id, req.body, req.auth.userId);
+  const body = parseBody(req, updateRoleSchema);
+  const auth = requireAuthContext(req);
+  const role = await service.updateRole(auth, req.params.id, body);
   sendSuccess(res, role);
 }
 
 export async function deleteRole(req: Request, res: Response): Promise<void> {
-  if (!req.auth) throw ApiError.unauthorized();
-  await service.deleteRole(req.params.id, req.auth.userId);
+  const auth = requireAuthContext(req);
+  await service.deleteRole(auth, req.params.id);
   sendNoContent(res);
 }
 
 export async function assignRole(req: Request, res: Response): Promise<void> {
-  if (!req.auth) throw ApiError.unauthorized();
-  const assignment = await service.assignRole(req.body, req.auth.userId);
+  const body = parseBody(req, assignRoleSchema);
+  const auth = requireAuthContext(req);
+  const assignment = await service.assignRole(auth, body);
   sendCreated(res, assignment);
 }
 
 export async function revokeAssignment(req: Request, res: Response): Promise<void> {
-  if (!req.auth) throw ApiError.unauthorized();
-  await service.revokeAssignment(req.params.assignmentId, req.auth.userId);
+  const auth = requireAuthContext(req);
+  await service.revokeAssignment(auth, req.params.assignmentId);
   sendNoContent(res);
 }
 
 export async function setSystemRole(req: Request, res: Response): Promise<void> {
-  if (!req.auth) throw ApiError.unauthorized();
-  const user = await service.setSystemRole(req.params.userId, req.body.systemRole, req.auth.userId);
+  const body = parseBody(req, setSystemRoleSchema);
+  const auth = requireAuthContext(req);
+  const user = await service.setSystemRole(auth, req.params.userId, body.systemRole);
   sendSuccess(res, user);
 }

@@ -1,8 +1,8 @@
 import fs from "fs";
 import path from "path";
-import { Worker, Job } from "bullmq";
+import { Worker, type Job } from "bullmq";
 import { bullConnection } from "../lib/redis";
-import { QUEUE_NAMES, PayslipJob } from "../queues";
+import { QUEUE_NAMES, type PayslipJob } from "../queues";
 import { prisma } from "../lib/prisma";
 import { payslipsDir, ensureStorage } from "../lib/storage";
 import { logger } from "../lib/logger";
@@ -29,7 +29,7 @@ export function createPayslipWorker(): Worker {
         `Deductions: ${record.deductionTotal.toString()}`,
         `Net: ${record.netSalary.toString()} ${record.currency}`,
       ].join("\n");
-      fs.writeFileSync(filePath, content);
+      await fs.promises.writeFile(filePath, content);
 
       await prisma.payrollRecord.update({
         where: { id: record.id },

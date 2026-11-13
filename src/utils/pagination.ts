@@ -1,4 +1,4 @@
-import { PaginationMeta } from "./response";
+import { type PaginationMeta } from "./response";
 
 export interface PageParams {
   page: number;
@@ -7,10 +7,24 @@ export interface PageParams {
   take: number;
 }
 
-export function parsePagination(query: Record<string, unknown>): PageParams {
-  const page = Math.max(1, Number.parseInt(String(query.page ?? "1"), 10) || 1);
-  const rawSize = Number.parseInt(String(query.pageSize ?? "25"), 10);
-  const pageSize = Number.isNaN(rawSize) ? 25 : rawSize;
+export const DEFAULT_PAGE_SIZE = 25;
+export const MAX_PAGE_SIZE = 100;
+/** Deep offsets are expensive for the database; nobody pages this far by hand. */
+export const MAX_PAGE = 10_000;
+
+function clampInt(raw: unknown, fallback: number, min: number, max: number): number {
+  const parsed = typeof raw === "string" || typeof raw === "number" ? Number.parseInt(String(raw), 10) : Number.NaN;
+  if (Number.isNaN(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+/**
+ * pageSize was unbounded (pageSize=1000000 loaded whole tables, negative
+ * values reached Prisma): it is now clamped to 1..MAX_PAGE_SIZE.
+ */
+export function parsePagination(query: { page?: unknown; pageSize?: unknown }): PageParams {
+  const page = clampInt(query.page, 1, 1, MAX_PAGE);
+  const pageSize = clampInt(query.pageSize, DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE);
   return {
     page,
     pageSize,

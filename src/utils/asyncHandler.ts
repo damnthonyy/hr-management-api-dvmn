@@ -1,6 +1,6 @@
-import { NextFunction, Request, Response } from "express";
+import { type NextFunction, type Request, type Response } from "express";
 
-type Handler = (req: Request, res: Response, next: NextFunction) => Promise<unknown> | unknown;
+type Handler = (req: Request, res: Response, next: NextFunction) => unknown;
 
 export function asyncHandler(handler: Handler) {
   return (req: Request, res: Response, next: NextFunction): void => {

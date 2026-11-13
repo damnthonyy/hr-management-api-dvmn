@@ -31,6 +31,14 @@ export class ApiError extends Error {
     return new ApiError(409, "CONFLICT", message, details);
   }
 
+  static payloadTooLarge(message = "Payload too large"): ApiError {
+    return new ApiError(413, "PAYLOAD_TOO_LARGE", message);
+  }
+
+  static unsupportedMediaType(message: string): ApiError {
+    return new ApiError(415, "UNSUPPORTED_MEDIA_TYPE", message);
+  }
+
   static unprocessable(message: string, details?: unknown): ApiError {
     return new ApiError(422, "UNPROCESSABLE_ENTITY", message, details);
   }

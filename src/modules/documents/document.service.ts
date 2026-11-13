@@ -1,14 +1,27 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import axios from "axios";
+import { type Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
-import { uploadsDir, resolveStoragePath } from "../../lib/storage";
+import {
+  fileExists,
+  removeFile,
+  resolveStoragePath,
+  sanitizeFileName,
+  sha256File,
+  uploadsDir,
+} from "../../lib/storage";
 import { randomToken } from "../../utils/tokens";
 import { recordAudit } from "../../services/audit.service";
 import { enqueueDocumentProcessing } from "../../queues";
 import { logger } from "../../lib/logger";
+import { assertOrgRefs } from "../../utils/tenant";
+import { contentMatchesType, extensionFor, isAllowedMimeType, SIGNATURE_BYTES } from "../../lib/fileType";
+import { fetchRemoteFile, RemoteFileTooLargeError, UnsafeUrlError } from "../../lib/safeFetch";
+import { env } from "../../config/env";
+import { buildMeta, parsePagination } from "../../utils/pagination";
+import type { ListDocumentsQuery } from "./document.validation";
 
 interface UploadedFile {
   filename: string;
@@ -18,30 +31,51 @@ interface UploadedFile {
   path: string;
 }
 
-export async function listDocuments(organizationId: string, query: Record<string, unknown>) {
-  const where: Record<string, unknown> = { organizationId };
-  if (typeof query.employeeId === "string") where.employeeId = query.employeeId;
-  if (typeof query.categoryId === "string") where.categoryId = query.categoryId;
-  return prisma.document.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    include: { category: true, employee: { select: { id: true, firstName: true, lastName: true } } },
-  });
+export async function listDocuments(organizationId: string, query: ListDocumentsQuery) {
+  const where: Prisma.DocumentWhereInput = { organizationId };
+  if (query.employeeId) where.employeeId = query.employeeId;
+  if (query.categoryId) where.categoryId = query.categoryId;
+  const params = parsePagination(query);
+  const [items, total] = await Promise.all([
+    prisma.document.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: params.skip,
+      take: params.take,
+      include: { category: true, employee: { select: { id: true, firstName: true, lastName: true } } },
+    }),
+    prisma.document.count({ where }),
+  ]);
+  return { items, meta: buildMeta(params, total) };
 }
 
-export async function getDocument(id: string) {
-  const document = await prisma.document.findUnique({ where: { id } });
+export async function getDocument(organizationId: string, id: string) {
+  const document = await prisma.document.findUnique({ where: { id, organizationId } });
   if (!document) throw ApiError.notFound("Document not found");
   return document;
 }
 
-export async function saveUploadedDocument(organizationId: string, file: UploadedFile, meta: {
-  employeeId?: string;
-  categoryId?: string;
-  uploadedById: string;
-}) {
+export async function saveUploadedDocument(
+  organizationId: string,
+  file: UploadedFile,
+  meta: {
+    employeeId?: string;
+    categoryId?: string;
+    uploadedById: string;
+  }
+) {
+  try {
+    // The declared MIME type is client controlled: check the content.
+    if (!contentMatchesType(file.mimetype, await readHead(file.path))) {
+      throw ApiError.unsupportedMediaType("File content does not match its declared type");
+    }
+    await assertOrgRefs(organizationId, { employee: meta.employeeId, documentCategory: meta.categoryId });
+  } catch (error) {
+    await removeFile(file.path);
+    throw error;
+  }
   const relative = path.join("uploads", file.filename);
-  const checksum = await fileChecksum(file.path);
+  const checksum = await sha256File(file.path);
   const document = await prisma.document.create({
     data: {
       organizationId,
@@ -49,7 +83,7 @@ export async function saveUploadedDocument(organizationId: string, file: Uploade
       categoryId: meta.categoryId ?? null,
       uploadedById: meta.uploadedById,
       fileName: file.filename,
-      originalName: file.originalname,
+      originalName: sanitizeFileName(file.originalname),
       mimeType: file.mimetype,
       sizeBytes: file.size,
       storagePath: relative,
@@ -68,31 +102,45 @@ export async function saveUploadedDocument(organizationId: string, file: Uploade
   return document;
 }
 
-export async function importFromUrl(organizationId: string, data: {
-  url: string;
-  employeeId?: string;
-  categoryId?: string;
-  fileName?: string;
-}, uploadedById: string) {
-  const response = await axios.get(data.url, {
-    responseType: "arraybuffer",
-    maxRedirects: 5,
-    timeout: 10000,
-    validateStatus: () => true,
-  });
+export async function importFromUrl(
+  organizationId: string,
+  data: {
+    url: string;
+    employeeId?: string;
+    categoryId?: string;
+    fileName?: string;
+  },
+  uploadedById: string
+) {
+  await assertOrgRefs(organizationId, { employee: data.employeeId, documentCategory: data.categoryId });
 
-  if (response.status >= 400) {
-    throw ApiError.badRequest(`Remote server responded with status ${response.status}`);
+  let remote;
+  try {
+    remote = await fetchRemoteFile(data.url, { maxBytes: env.maxUploadBytes });
+  } catch (error) {
+    if (error instanceof UnsafeUrlError) throw ApiError.badRequest(error.message);
+    if (error instanceof RemoteFileTooLargeError) throw ApiError.payloadTooLarge("Remote file is too large");
+    // Do not echo network errors (refused, timeout...): they would turn the
+    // endpoint into a port scanner.
+    logger.warn({ err: error, url: data.url }, "document import failed");
+    throw ApiError.badRequest("Could not download the file");
   }
 
-  const buffer = Buffer.from(response.data as ArrayBuffer);
-  const contentType = String(response.headers["content-type"] ?? "application/octet-stream").split(";")[0];
-  const inferredName = data.fileName ?? path.basename(new URL(data.url).pathname) ?? `import-${randomToken(6)}`;
-  const safeName = inferredName.length > 0 ? inferredName : `import-${randomToken(6)}`;
-  const storedName = `${Date.now()}-${randomToken(8)}-${safeName}`;
+  if (remote.status < 200 || remote.status >= 300) {
+    throw ApiError.badRequest("Could not download the file");
+  }
+  if (!isAllowedMimeType(remote.contentType) || !contentMatchesType(remote.contentType, remote.body)) {
+    throw ApiError.unsupportedMediaType("Only PDF, DOCX, PNG and JPEG files are accepted");
+  }
+
+  const buffer = remote.body;
+  // The user-supplied name is only kept for display: the file on disk gets
+  // a server-generated name, so "../" in fileName cannot escape uploads/.
+  const safeName = sanitizeFileName(data.fileName ?? path.basename(new URL(remote.finalUrl).pathname), "import");
+  const storedName = `${Date.now()}-${randomToken(8)}${extensionFor(remote.contentType)}`;
   const absolutePath = path.join(uploadsDir(), storedName);
 
-  fs.writeFileSync(absolutePath, buffer);
+  await fs.promises.writeFile(absolutePath, buffer);
   const checksum = crypto.createHash("sha256").update(buffer).digest("hex");
 
   const document = await prisma.document.create({
@@ -103,7 +151,7 @@ export async function importFromUrl(organizationId: string, data: {
       uploadedById,
       fileName: storedName,
       originalName: safeName,
-      mimeType: contentType,
+      mimeType: remote.contentType,
       sizeBytes: buffer.length,
       storagePath: path.join("uploads", storedName),
       source: "url-import",
@@ -126,24 +174,29 @@ export async function importFromUrl(organizationId: string, data: {
   return document;
 }
 
-export async function readDocumentFile(id: string): Promise<{ absolutePath: string; document: Awaited<ReturnType<typeof getDocument>> }> {
-  const document = await getDocument(id);
+export async function readDocumentFile(
+  organizationId: string,
+  id: string
+): Promise<{ absolutePath: string; document: Awaited<ReturnType<typeof getDocument>> }> {
+  const document = await getDocument(organizationId, id);
   const absolutePath = resolveStoragePath(document.storagePath);
-  if (!fs.existsSync(absolutePath)) {
+  if (!(await fileExists(absolutePath))) {
     throw ApiError.notFound("File is no longer available on disk");
   }
   return { absolutePath, document };
 }
 
-export async function deleteDocument(id: string, actorId: string) {
-  const document = await getDocument(id);
+export async function deleteDocument(organizationId: string, id: string, actorId: string) {
+  const document = await getDocument(organizationId, id);
   const absolutePath = resolveStoragePath(document.storagePath);
+  // Row first, then file: if the delete fails, the document stays usable
+  // instead of pointing to a file that is already gone.
+  await prisma.document.delete({ where: { id, organizationId } });
   try {
-    if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath);
+    await removeFile(absolutePath);
   } catch (error) {
     logger.warn({ err: error, id }, "failed to remove file from disk");
   }
-  await prisma.document.delete({ where: { id } });
   await recordAudit({
     organizationId: document.organizationId,
     userId: actorId,
@@ -162,7 +215,13 @@ export async function createCategory(organizationId: string, name: string) {
   return prisma.documentCategory.create({ data: { organizationId, name } });
 }
 
-async function fileChecksum(filePath: string): Promise<string> {
-  const buffer = fs.readFileSync(filePath);
-  return crypto.createHash("sha256").update(buffer).digest("hex");
+async function readHead(filePath: string): Promise<Buffer> {
+  const handle = await fs.promises.open(filePath, "r");
+  try {
+    const buffer = Buffer.alloc(SIGNATURE_BYTES);
+    const { bytesRead } = await handle.read(buffer, 0, SIGNATURE_BYTES, 0);
+    return buffer.subarray(0, bytesRead);
+  } finally {
+    await handle.close();
+  }
 }

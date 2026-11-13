@@ -1,55 +1,70 @@
-import { Request, Response } from "express";
+import { type Request, type Response } from "express";
 import * as service from "./document.service";
-import { sendSuccess, sendCreated, sendNoContent } from "../../utils/response";
+import { parseBody, parseQuery } from "../../middleware/validate";
+import {
+  createCategorySchema,
+  importFromUrlSchema,
+  listDocumentsQuery,
+  uploadDocumentSchema,
+} from "./document.validation";
+import { sendSuccess, sendCreated, sendNoContent, sendPaginated } from "../../utils/response";
 import { ApiError } from "../../utils/apiError";
-
-function orgId(req: Request): string {
-  if (!req.auth) throw ApiError.unauthorized();
-  return req.auth.organizationId;
-}
+import { removeFile } from "../../lib/storage";
+import { requireAuthContext, requireOrgId } from "../../utils/tenant";
 
 export async function list(req: Request, res: Response): Promise<void> {
-  sendSuccess(res, await service.listDocuments(orgId(req), req.query as Record<string, unknown>));
+  const { items, meta } = await service.listDocuments(requireOrgId(req), parseQuery(req, listDocumentsQuery));
+  sendPaginated(res, items, meta);
 }
 
 export async function getOne(req: Request, res: Response): Promise<void> {
-  sendSuccess(res, await service.getDocument(req.params.id));
+  sendSuccess(res, await service.getDocument(requireOrgId(req), req.params.id));
 }
 
 export async function uploadDocument(req: Request, res: Response): Promise<void> {
-  if (!req.auth) throw ApiError.unauthorized();
+  const auth = requireAuthContext(req);
   if (!req.file) throw ApiError.badRequest("No file provided");
-  const document = await service.saveUploadedDocument(orgId(req), req.file, {
-    employeeId: req.body?.employeeId,
-    categoryId: req.body?.categoryId,
-    uploadedById: req.auth.userId,
+  let fields;
+  try {
+    fields = parseBody(req, uploadDocumentSchema);
+  } catch (error) {
+    // multer already wrote the file: do not leave it behind.
+    await removeFile(req.file.path);
+    throw error;
+  }
+  const document = await service.saveUploadedDocument(auth.organizationId, req.file, {
+    ...fields,
+    uploadedById: auth.userId,
   });
   sendCreated(res, document);
 }
 
 export async function importFromUrl(req: Request, res: Response): Promise<void> {
-  if (!req.auth) throw ApiError.unauthorized();
-  const document = await service.importFromUrl(orgId(req), req.body, req.auth.userId);
+  const body = parseBody(req, importFromUrlSchema);
+  const auth = requireAuthContext(req);
+  const document = await service.importFromUrl(auth.organizationId, body, auth.userId);
   sendCreated(res, document);
 }
 
 export async function download(req: Request, res: Response): Promise<void> {
-  const { absolutePath, document } = await service.readDocumentFile(req.params.id);
+  const { absolutePath, document } = await service.readDocumentFile(requireOrgId(req), req.params.id);
   res.setHeader("Content-Type", document.mimeType);
-  res.setHeader("Content-Disposition", `attachment; filename="${document.originalName}"`);
+  // res.attachment() encodes the filename (RFC 6266), preventing header injection.
+  res.attachment(document.originalName);
   res.sendFile(absolutePath);
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {
-  if (!req.auth) throw ApiError.unauthorized();
-  await service.deleteDocument(req.params.id, req.auth.userId);
+  const auth = requireAuthContext(req);
+  await service.deleteDocument(auth.organizationId, req.params.id, auth.userId);
   sendNoContent(res);
 }
 
 export async function listCategories(req: Request, res: Response): Promise<void> {
-  sendSuccess(res, await service.listCategories(orgId(req)));
+  sendSuccess(res, await service.listCategories(requireOrgId(req)));
 }
 
 export async function createCategory(req: Request, res: Response): Promise<void> {
-  sendCreated(res, await service.createCategory(orgId(req), req.body.name));
+  const body = parseBody(req, createCategorySchema);
+  sendCreated(res, await service.createCategory(requireOrgId(req), body.name));
 }

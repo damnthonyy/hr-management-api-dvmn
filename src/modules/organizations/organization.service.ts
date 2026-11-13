@@ -1,4 +1,4 @@
-import { Prisma, SystemRole } from "@prisma/client";
+import { type Prisma, SystemRole } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { slugify } from "../../utils/slug";
@@ -7,10 +7,11 @@ import { hashPassword } from "../../utils/password";
 import { parsePagination, buildMeta } from "../../utils/pagination";
 import { recordAudit } from "../../services/audit.service";
 import { cacheGet, cacheSet, cacheDelete } from "../../services/cache";
+import type { ListOrganizationsQuery, UpdateSubscriptionInput } from "./organization.validation";
 
-export async function listOrganizations(query: Record<string, unknown>) {
+export async function listOrganizations(query: ListOrganizationsQuery) {
   const params = parsePagination(query);
-  const search = typeof query.search === "string" ? query.search : undefined;
+  const search = query.search || undefined;
   const where: Prisma.OrganizationWhereInput = search
     ? { OR: [{ name: { contains: search, mode: "insensitive" } }, { slug: { contains: search, mode: "insensitive" } }] }
     : {};
@@ -27,14 +28,17 @@ export async function listOrganizations(query: Record<string, unknown>) {
   return { items, meta: buildMeta(params, total) };
 }
 
-export async function createOrganization(data: {
-  name: string;
-  legalName?: string;
-  domain?: string;
-  timezone?: string;
-  currency?: string;
-  employeeLimit?: number;
-}, actorId: string) {
+export async function createOrganization(
+  data: {
+    name: string;
+    legalName?: string;
+    domain?: string;
+    timezone?: string;
+    currency?: string;
+    employeeLimit?: number;
+  },
+  actorId: string
+) {
   const slug = `${slugify(data.name)}-${randomToken(3)}`;
   const organization = await prisma.organization.create({
     data: {
@@ -106,17 +110,12 @@ export async function updateSettings(id: string, settings: Record<string, unknow
   return organization;
 }
 
-export async function updateSubscription(id: string, data: {
-  plan?: string;
-  status?: string;
-  seats?: number;
-  renewsAt?: string;
-}, actorId: string) {
+export async function updateSubscription(id: string, data: UpdateSubscriptionInput, actorId: string) {
   const subscription = await prisma.subscription.update({
     where: { organizationId: id },
     data: {
-      plan: data.plan as never,
-      status: data.status as never,
+      plan: data.plan,
+      status: data.status,
       seats: data.seats,
       renewsAt: data.renewsAt ? new Date(data.renewsAt) : undefined,
     },
@@ -134,16 +133,28 @@ export async function updateSubscription(id: string, data: {
 export async function listAdmins(id: string) {
   return prisma.user.findMany({
     where: { organizationId: id, systemRole: { in: [SystemRole.ORGANIZATION_ADMIN, SystemRole.SUPER_ADMIN] } },
-    select: { id: true, email: true, firstName: true, lastName: true, systemRole: true, isActive: true, lastLoginAt: true },
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      systemRole: true,
+      isActive: true,
+      lastLoginAt: true,
+    },
   });
 }
 
-export async function addAdmin(id: string, data: {
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-}, actorId: string) {
+export async function addAdmin(
+  id: string,
+  data: {
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+  },
+  actorId: string
+) {
   const passwordHash = await hashPassword(data.password);
   const user = await prisma.user.create({
     data: {

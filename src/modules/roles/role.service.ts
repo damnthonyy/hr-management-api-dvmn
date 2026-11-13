@@ -1,7 +1,37 @@
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
-import { ALL_PERMISSIONS } from "../../config/permissions";
+import { type SystemRole } from "@prisma/client";
+import { ALL_PERMISSIONS, canGrantSystemRole, isKnownPermission, missingPermissions } from "../../config/permissions";
+import type { AuthContext } from "../../types/express";
 import { recordAudit } from "../../services/audit.service";
+import { assertOrgRefs } from "../../utils/tenant";
+
+/**
+ * Custom role permissions must be known keys, and the caller can only
+ * hand out permissions they hold themselves.
+ */
+function assertGrantablePermissions(auth: AuthContext, keys: string[]): void {
+  const unknown = keys.filter((key) => !isKnownPermission(key));
+  if (unknown.length > 0) throw ApiError.badRequest("Unknown permissions", { permissions: unknown });
+  const missing = missingPermissions(auth.permissions, keys);
+  if (missing.length > 0) {
+    throw ApiError.forbidden("You cannot grant permissions you do not hold");
+  }
+}
+
+async function rolePermissionKeys(roleId: string): Promise<string[]> {
+  const rows = await prisma.rolePermission.findMany({
+    where: { roleId },
+    select: { permission: { select: { key: true } } },
+  });
+  return rows.map((row) => row.permission.key);
+}
+
+async function findRoleInOrg(organizationId: string, id: string) {
+  const role = await prisma.role.findUnique({ where: { id, organizationId } });
+  if (!role) throw ApiError.notFound("Role not found");
+  return role;
+}
 
 export async function listPermissions() {
   return prisma.permission.findMany({ orderBy: { key: "asc" } });
@@ -22,11 +52,16 @@ export async function listRoles(organizationId: string) {
   });
 }
 
-export async function createRole(organizationId: string, data: {
-  name: string;
-  description?: string;
-  permissions: string[];
-}, actorId: string) {
+export async function createRole(
+  auth: AuthContext,
+  data: {
+    name: string;
+    description?: string;
+    permissions: string[];
+  }
+) {
+  const { organizationId, userId: actorId } = auth;
+  assertGrantablePermissions(auth, data.permissions);
   const permissions = await prisma.permission.findMany({ where: { key: { in: data.permissions } } });
   const role = await prisma.role.create({
     data: {
@@ -47,17 +82,23 @@ export async function createRole(organizationId: string, data: {
   return role;
 }
 
-export async function updateRole(id: string, data: {
-  name?: string;
-  description?: string;
-  permissions?: string[];
-}, actorId: string) {
-  const existing = await prisma.role.findUnique({ where: { id } });
-  if (!existing) throw ApiError.notFound("Role not found");
+export async function updateRole(
+  auth: AuthContext,
+  id: string,
+  data: {
+    name?: string;
+    description?: string;
+    permissions?: string[];
+  }
+) {
+  const { organizationId, userId: actorId } = auth;
+  const existing = await findRoleInOrg(organizationId, id);
+  assertGrantablePermissions(auth, await rolePermissionKeys(id));
+  if (data.permissions) assertGrantablePermissions(auth, data.permissions);
 
   const role = await prisma.$transaction(async (tx) => {
     const updated = await tx.role.update({
-      where: { id },
+      where: { id, organizationId },
       data: { name: data.name, description: data.description },
     });
     if (data.permissions) {
@@ -81,11 +122,12 @@ export async function updateRole(id: string, data: {
   return role;
 }
 
-export async function deleteRole(id: string, actorId: string) {
-  const existing = await prisma.role.findUnique({ where: { id } });
-  if (!existing) throw ApiError.notFound("Role not found");
+export async function deleteRole(auth: AuthContext, id: string) {
+  const { organizationId, userId: actorId } = auth;
+  const existing = await findRoleInOrg(organizationId, id);
   if (existing.isSystem) throw ApiError.badRequest("System roles cannot be deleted");
-  await prisma.role.delete({ where: { id } });
+  assertGrantablePermissions(auth, await rolePermissionKeys(id));
+  await prisma.role.delete({ where: { id, organizationId } });
   await recordAudit({
     organizationId: existing.organizationId,
     userId: actorId,
@@ -96,11 +138,17 @@ export async function deleteRole(id: string, actorId: string) {
   return { ok: true };
 }
 
-export async function assignRole(data: {
-  userId: string;
-  roleId: string;
-  departmentId?: string;
-}, actorId: string) {
+export async function assignRole(
+  auth: AuthContext,
+  data: {
+    userId: string;
+    roleId: string;
+    departmentId?: string;
+  }
+) {
+  const { organizationId, userId: actorId } = auth;
+  await assertOrgRefs(organizationId, { user: data.userId, role: data.roleId, department: data.departmentId });
+  assertGrantablePermissions(auth, await rolePermissionKeys(data.roleId));
   const assignment = await prisma.userRole.create({
     data: {
       userId: data.userId,
@@ -108,9 +156,8 @@ export async function assignRole(data: {
       departmentId: data.departmentId ?? null,
     },
   });
-  const user = await prisma.user.findUnique({ where: { id: data.userId }, select: { organizationId: true } });
   await recordAudit({
-    organizationId: user?.organizationId,
+    organizationId,
     userId: actorId,
     action: "role.assigned",
     entityType: "UserRole",
@@ -120,11 +167,14 @@ export async function assignRole(data: {
   return assignment;
 }
 
-export async function revokeAssignment(assignmentId: string, actorId: string) {
-  const assignment = await prisma.userRole.findUnique({ where: { id: assignmentId } });
+export async function revokeAssignment(auth: AuthContext, assignmentId: string) {
+  const { organizationId, userId: actorId } = auth;
+  const assignment = await prisma.userRole.findUnique({ where: { id: assignmentId, role: { organizationId } } });
   if (!assignment) throw ApiError.notFound("Assignment not found");
+  assertGrantablePermissions(auth, await rolePermissionKeys(assignment.roleId));
   await prisma.userRole.delete({ where: { id: assignmentId } });
   await recordAudit({
+    organizationId,
     userId: actorId,
     action: "role.revoked",
     entityType: "UserRole",
@@ -133,10 +183,20 @@ export async function revokeAssignment(assignmentId: string, actorId: string) {
   return { ok: true };
 }
 
-export async function setSystemRole(userId: string, systemRole: string, actorId: string) {
+export async function setSystemRole(auth: AuthContext, userId: string, systemRole: SystemRole) {
+  const { organizationId, userId: actorId } = auth;
+  const target = await prisma.user.findUnique({ where: { id: userId, organizationId } });
+  if (!target) throw ApiError.notFound("Referenced user not found");
+  if (target.id === actorId) throw ApiError.forbidden("You cannot change your own system role");
+  // Both the new role and the user's current role must be within the
+  // caller's privileges: an admin can neither promote above themselves
+  // nor demote someone more privileged.
+  if (!canGrantSystemRole(auth, systemRole) || !canGrantSystemRole(auth, target.systemRole)) {
+    throw ApiError.forbidden("You cannot grant or change this system role");
+  }
   const user = await prisma.user.update({
-    where: { id: userId },
-    data: { systemRole: systemRole as never },
+    where: { id: userId, organizationId },
+    data: { systemRole },
     select: { id: true, email: true, systemRole: true, organizationId: true },
   });
   await recordAudit({

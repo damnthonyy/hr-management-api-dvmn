@@ -1,10 +1,14 @@
-import { NextFunction, Request, Response } from "express";
+import { type NextFunction, type Request, type Response } from "express";
 import { prisma } from "../lib/prisma";
 import { ApiError } from "../utils/apiError";
 import { verifyAccessToken } from "../utils/jwt";
 import { permissionsForRole } from "../config/permissions";
 
-export async function authenticate(req: Request, _res: Response, next: NextFunction): Promise<void> {
+/** Avoid a write per request: refresh lastSeenAt at most every 5 minutes. */
+const SESSION_TOUCH_INTERVAL_MS = 5 * 60 * 1000;
+
+/** Resolves the request's auth context, or throws an ApiError (401). */
+async function resolveAuth(req: Request): Promise<NonNullable<Request["auth"]>> {
   try {
     const header = req.header("authorization");
     if (!header || !header.toLowerCase().startsWith("bearer ")) {
@@ -24,34 +28,64 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       throw ApiError.unauthorized("Account is not active");
     }
 
-    const rolePermissions = permissionsForRole(payload.role);
+    // The access token is only valid while its session is: logout,
+    // "revoke session" and password changes take effect immediately.
+    const session = await prisma.session.findUnique({ where: { id: payload.sessionId } });
+    if (!session || session.userId !== user.id || session.revokedAt || session.expiresAt.getTime() < Date.now()) {
+      throw ApiError.unauthorized("Session is no longer valid");
+    }
+    if (Date.now() - session.lastSeenAt.getTime() > SESSION_TOUCH_INTERVAL_MS) {
+      void prisma.session
+        .update({ where: { id: session.id }, data: { lastSeenAt: new Date() } })
+        .catch(() => undefined);
+    }
+
+    // Role and organization come from the database, not from the token:
+    // a demotion or deactivation must take effect immediately, not when
+    // the access token expires.
+    const rolePermissions = permissionsForRole(user.systemRole);
     const customPermissions = user.roleAssignments.flatMap((assignment) =>
       assignment.role.permissions.map((rp) => rp.permission.key)
     );
 
-    req.auth = {
+    return {
       userId: user.id,
-      organizationId: payload.organizationId,
+      organizationId: user.organizationId,
       email: user.email,
-      role: payload.role,
+      role: user.systemRole,
       sessionId: payload.sessionId,
       permissions: Array.from(new Set([...rolePermissions, ...customPermissions])),
     };
-    next();
   } catch (error) {
-    if (error instanceof ApiError) {
-      next(error);
-      return;
-    }
-    next(ApiError.unauthorized("Invalid or expired token"));
+    if (error instanceof ApiError) throw error;
+    throw ApiError.unauthorized("Invalid or expired token");
   }
 }
 
-export function optionalAuthenticate(req: Request, _res: Response, next: NextFunction): void {
-  const header = req.header("authorization");
-  if (!header) {
-    next();
+export async function authenticate(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  let auth: NonNullable<Request["auth"]>;
+  try {
+    auth = await resolveAuth(req);
+  } catch (error) {
+    next(error);
     return;
   }
-  authenticate(req, _res, next).catch(() => next());
+  req.auth = auth;
+  next();
+}
+
+/**
+ * Sets req.auth when a valid token is provided, otherwise continues
+ * anonymously. It used to delegate to authenticate, which answers 401 on an
+ * invalid token instead of continuing.
+ */
+export async function optionalAuthenticate(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  if (req.header("authorization")) {
+    try {
+      req.auth = await resolveAuth(req);
+    } catch {
+      req.auth = undefined;
+    }
+  }
+  next();
 }

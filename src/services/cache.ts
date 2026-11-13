@@ -18,10 +18,18 @@ export async function cacheDelete(key: string): Promise<void> {
   await getRedis().del(key);
 }
 
-export async function cacheDeletePattern(pattern: string): Promise<void> {
+/**
+ * KEYS walks the whole keyspace in one blocking call (Redis is single
+ * threaded: every client waits). SCAN iterates in small batches instead.
+ */
+export async function cacheDeletePattern(pattern: string): Promise<number> {
   const redis = getRedis();
-  const keys = await redis.keys(pattern);
-  if (keys.length > 0) {
-    await redis.del(...keys);
-  }
+  let cursor = "0";
+  let deleted = 0;
+  do {
+    const [next, keys] = await redis.scan(cursor, "MATCH", pattern, "COUNT", 200);
+    if (keys.length > 0) deleted += await redis.unlink(...keys);
+    cursor = next;
+  } while (cursor !== "0");
+  return deleted;
 }

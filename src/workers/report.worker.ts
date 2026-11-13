@@ -1,18 +1,21 @@
-import { Worker, Job } from "bullmq";
+import { UnrecoverableError, Worker, type Job } from "bullmq";
 import { bullConnection } from "../lib/redis";
-import { QUEUE_NAMES, ReportJob } from "../queues";
+import { QUEUE_NAMES, type ReportJob } from "../queues";
 import * as reportService from "../modules/reports/report.service";
-import { createNotification } from "../services/notification.service";
+import { createNotification, toJson } from "../services/notification.service";
 import { logger } from "../lib/logger";
 
 export function createReportWorker(): Worker {
   return new Worker(
     QUEUE_NAMES.report,
     async (job: Job<ReportJob>) => {
-      const { organizationId, reportType, requestedBy } = job.data;
+      const { organizationId, reportType, requestedBy, includeSalary = false } = job.data;
       let payload: unknown;
       switch (reportType) {
         case "salary-summary":
+          // Jobs queued before includeSalary existed are not trusted with salary data.
+          // Permanent failure: retrying cannot grant the permission.
+          if (!includeSalary) throw new UnrecoverableError("salary report requested without salary:view");
           payload = await reportService.salarySummary(organizationId);
           break;
         case "turnover":
@@ -22,7 +25,7 @@ export function createReportWorker(): Worker {
           payload = await reportService.leaveStatistics(organizationId);
           break;
         default:
-          payload = await reportService.dashboard(organizationId);
+          payload = await reportService.dashboard(organizationId, includeSalary);
       }
 
       await createNotification({
@@ -30,7 +33,7 @@ export function createReportWorker(): Worker {
         userId: requestedBy,
         type: "report.ready",
         title: `Report ready: ${reportType}`,
-        data: payload as never,
+        data: toJson(payload),
       });
 
       return { generated: true };

@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { accountEmail } from "../../utils/schemas";
+import { paginationQuery, searchFilter } from "../../utils/query";
 
 export const createOrganizationSchema = z.object({
   name: z.string().min(2).max(120),
@@ -13,7 +15,7 @@ export const updateOrganizationSchema = z.object({
   name: z.string().min(2).max(120).optional(),
   legalName: z.string().max(160).optional(),
   domain: z.string().max(120).optional(),
-  logoUrl: z.string().url().optional(),
+  logoUrl: z.url().optional(),
   timezone: z.string().max(60).optional(),
   currency: z.string().length(3).optional(),
   employeeLimit: z.number().int().positive().optional(),
@@ -21,19 +23,24 @@ export const updateOrganizationSchema = z.object({
 });
 
 export const updateSettingsSchema = z.object({
-  settings: z.record(z.unknown()),
+  settings: z.record(z.string(), z.unknown()),
 });
 
 export const updateSubscriptionSchema = z.object({
   plan: z.enum(["FREE", "STARTER", "BUSINESS", "ENTERPRISE"]).optional(),
   status: z.enum(["TRIALING", "ACTIVE", "PAST_DUE", "CANCELED"]).optional(),
   seats: z.number().int().positive().optional(),
-  renewsAt: z.string().datetime().optional(),
+  renewsAt: z.iso.datetime().optional(),
 });
 
 export const addAdminSchema = z.object({
-  email: z.string().email(),
+  email: accountEmail(),
   password: z.string().min(8).max(128),
   firstName: z.string().min(1).max(80),
   lastName: z.string().min(1).max(80),
 });
+
+export const listOrganizationsQuery = z.object({ ...paginationQuery, search: searchFilter });
+export type ListOrganizationsQuery = z.infer<typeof listOrganizationsQuery>;
+
+export type UpdateSubscriptionInput = z.infer<typeof updateSubscriptionSchema>;

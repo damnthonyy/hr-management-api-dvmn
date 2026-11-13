@@ -5,6 +5,7 @@ import { connectPrisma, disconnectPrisma } from "./lib/prisma";
 import { pingRedis, closeRedis } from "./lib/redis";
 import { ensureStorage } from "./lib/storage";
 import { closeQueues } from "./queues";
+import { closeServer, createShutdown, installShutdownHandlers } from "./lib/shutdown";
 
 async function bootstrap(): Promise<void> {
   ensureStorage();
@@ -18,20 +19,21 @@ async function bootstrap(): Promise<void> {
     logger.info(`HR Management API listening on port ${env.port}`);
   });
 
-  const shutdown = async (signal: string): Promise<void> => {
-    logger.info(`received ${signal}, shutting down`);
-    server.close();
-    await closeQueues().catch(() => undefined);
-    await disconnectPrisma().catch(() => undefined);
-    await closeRedis().catch(() => undefined);
-    process.exit(0);
-  };
-
-  process.on("SIGTERM", () => void shutdown("SIGTERM"));
-  process.on("SIGINT", () => void shutdown("SIGINT"));
+  // Order matters: stop taking requests and let in-flight ones finish, then
+  // close what they use.
+  const shutdown = createShutdown({
+    logger,
+    steps: [
+      { name: "http server", run: () => closeServer(server) },
+      { name: "queues", run: closeQueues },
+      { name: "database", run: disconnectPrisma },
+      { name: "redis", run: closeRedis },
+    ],
+  });
+  installShutdownHandlers(shutdown, logger);
 }
 
-bootstrap().catch((error) => {
+bootstrap().catch((error: unknown) => {
   logger.error({ err: error }, "failed to start server");
   process.exit(1);
 });

@@ -1,4 +1,4 @@
-import { SystemRole } from "@prisma/client";
+import { type SystemRole } from "@prisma/client";
 
 export const PERMISSIONS = {
   EMPLOYEE_VIEW: "employee:view",
@@ -106,4 +106,32 @@ export const ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
 
 export function permissionsForRole(role: SystemRole): PermissionKey[] {
   return ROLE_PERMISSIONS[role] ?? [];
+}
+
+/** Minimal view of the caller needed for privilege checks. */
+export interface Grantor {
+  userId: string;
+  role: SystemRole;
+  permissions: readonly string[];
+}
+
+/** Permissions from `required` that `granted` does not hold. */
+export function missingPermissions(granted: readonly string[], required: readonly string[]): string[] {
+  return required.filter((permission) => !granted.includes(permission));
+}
+
+/**
+ * A caller may only hand out privileges they already hold:
+ * - SUPER_ADMIN is a cross-tenant role and can only be granted by a SUPER_ADMIN;
+ * - any other system role is grantable only if its permission set is a
+ *   subset of the caller's permissions.
+ */
+export function canGrantSystemRole(grantor: Grantor, target: SystemRole): boolean {
+  if (grantor.role === "SUPER_ADMIN") return true;
+  if (target === "SUPER_ADMIN") return false;
+  return missingPermissions(grantor.permissions, permissionsForRole(target)).length === 0;
+}
+
+export function isKnownPermission(key: string): key is PermissionKey {
+  return (ALL_PERMISSIONS as string[]).includes(key);
 }

@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { type Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 
 export interface CreateNotificationInput {
@@ -8,6 +8,14 @@ export interface CreateNotificationInput {
   title: string;
   body?: string;
   data?: Prisma.InputJsonValue;
+}
+
+/**
+ * Converts any serializable value (Decimal, Date...) to plain JSON, as it
+ * will be stored and returned anyway.
+ */
+export function toJson(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
 }
 
 export async function createNotification(input: CreateNotificationInput) {

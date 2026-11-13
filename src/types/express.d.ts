@@ -1,4 +1,4 @@
-import { SystemRole } from "@prisma/client";
+import { type SystemRole } from "@prisma/client";
 
 export interface AuthContext {
   userId: string;
