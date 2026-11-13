@@ -78,6 +78,23 @@ describe("multi-tenant isolation", () => {
     });
     victim.teamId = team.id;
 
+    const leaveType = await prisma.leaveType.create({
+      data: { organizationId: b.orgId, name: "Victim PTO", code: `PTO${unique}`.slice(0, 20), defaultDays: 25 },
+    });
+    victim.leaveTypeId = leaveType.id;
+    const leaveRequest = await prisma.leaveRequest.create({
+      data: {
+        organizationId: b.orgId,
+        employeeId: employee.id,
+        leaveTypeId: leaveType.id,
+        startDate: new Date(),
+        endDate: new Date(),
+        days: 1,
+        status: "PENDING",
+      },
+    });
+    victim.leaveRequestId = leaveRequest.id;
+
     ensureStorage();
     const fileName = `victim-${unique}.txt`;
     fs.writeFileSync(path.join(uploadsDir(), fileName), "confidential payslip");
@@ -237,6 +254,32 @@ describe("multi-tenant isolation", () => {
       expect(department?.managerId).toBeNull();
       const team = await prisma.team.findUnique({ where: { id: victim.teamId } });
       expect(team?.name).toBe("Victim Team");
+    });
+  });
+
+  describe("leave", () => {
+    const today = () => new Date().toISOString();
+    it.each([
+      ["POST", () => `/api/v1/leave/requests/${victim.leaveRequestId}/approve`, {}],
+      ["POST", () => `/api/v1/leave/requests/${victim.leaveRequestId}/reject`, {}],
+      ["POST", () => `/api/v1/leave/requests/${victim.leaveRequestId}/cancel`, {}],
+      ["GET", () => `/api/v1/leave/balances/${victim.employeeId}`, undefined],
+      ["GET", () => `/api/v1/leave/history/${victim.employeeId}`, undefined],
+      ["GET", () => `/api/v1/leave/calendar/${victim.departmentId}`, undefined],
+      ["PUT", () => "/api/v1/leave/balances", () => ({ employeeId: victim.employeeId, leaveTypeId: victim.leaveTypeId, year: 2026, entitledDays: 999 })],
+      ["POST", () => "/api/v1/leave/requests", () => ({ employeeId: victim.employeeId, leaveTypeId: victim.leaveTypeId, startDate: today(), endDate: today() })],
+    ] as const)("%s %s returns 404", async (method, url, body) => {
+      const req = request(app)[method.toLowerCase() as "get" | "post" | "put"](url()).set(asA());
+      const payload = typeof body === "function" ? body() : body;
+      const res = await (payload ? req.send(payload) : req);
+      expect(res.status).toBe(404);
+    });
+
+    it("left the victim leave request untouched", async () => {
+      const leave = await prisma.leaveRequest.findUnique({ where: { id: victim.leaveRequestId } });
+      expect(leave?.status).toBe("PENDING");
+      expect(await prisma.leaveBalance.count({ where: { employeeId: victim.employeeId } })).toBe(0);
+      expect(await prisma.leaveRequest.count({ where: { employeeId: victim.employeeId } })).toBe(1);
     });
   });
 });
