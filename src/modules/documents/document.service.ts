@@ -10,6 +10,7 @@ import { recordAudit } from "../../services/audit.service";
 import { enqueueDocumentProcessing } from "../../queues";
 import { logger } from "../../lib/logger";
 import { assertOrgRefs } from "../../utils/tenant";
+import { contentMatchesType, SIGNATURE_BYTES } from "../../lib/fileType";
 
 interface UploadedFile {
   filename: string;
@@ -42,6 +43,10 @@ export async function saveUploadedDocument(organizationId: string, file: Uploade
   uploadedById: string;
 }) {
   try {
+    // The declared MIME type is client controlled: check the content.
+    if (!contentMatchesType(file.mimetype, await readHead(file.path))) {
+      throw ApiError.unsupportedMediaType("File content does not match its declared type");
+    }
     await assertOrgRefs(organizationId, { employee: meta.employeeId, documentCategory: meta.categoryId });
   } catch (error) {
     fs.rmSync(file.path, { force: true });
@@ -172,6 +177,17 @@ export async function listCategories(organizationId: string) {
 
 export async function createCategory(organizationId: string, name: string) {
   return prisma.documentCategory.create({ data: { organizationId, name } });
+}
+
+async function readHead(filePath: string): Promise<Buffer> {
+  const handle = await fs.promises.open(filePath, "r");
+  try {
+    const buffer = Buffer.alloc(SIGNATURE_BYTES);
+    const { bytesRead } = await handle.read(buffer, 0, SIGNATURE_BYTES, 0);
+    return buffer.subarray(0, bytesRead);
+  } finally {
+    await handle.close();
+  }
 }
 
 async function fileChecksum(filePath: string): Promise<string> {

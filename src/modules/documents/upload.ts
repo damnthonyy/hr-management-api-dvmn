@@ -1,8 +1,9 @@
 import multer from "multer";
-import path from "path";
 import { randomToken } from "../../utils/tokens";
 import { uploadsDir, ensureStorage } from "../../lib/storage";
 import { env } from "../../config/env";
+import { ApiError } from "../../utils/apiError";
+import { extensionFor, isAllowedMimeType } from "../../lib/fileType";
 
 ensureStorage();
 
@@ -10,27 +11,21 @@ const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, uploadsDir());
   },
+  // Server-generated name; the extension comes from the (allowlisted)
+  // type, never from the client's file name.
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${Date.now()}-${randomToken(8)}${ext}`);
+    cb(null, `${Date.now()}-${randomToken(8)}${extensionFor(file.mimetype)}`);
   },
 });
 
-const ALLOWED_MIME = new Set([
-  "application/pdf",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "image/png",
-  "image/jpeg",
-]);
-
 export const upload = multer({
   storage,
-  limits: { fileSize: env.maxUploadBytes },
+  limits: { fileSize: env.maxUploadBytes, files: 1, fields: 10, fieldSize: 1024 },
   fileFilter: (_req, file, cb) => {
-    if (ALLOWED_MIME.has(file.mimetype)) {
+    if (isAllowedMimeType(file.mimetype)) {
       cb(null, true);
       return;
     }
-    cb(null, true);
+    cb(ApiError.unsupportedMediaType("Only PDF, DOCX, PNG and JPEG files are accepted"));
   },
 });

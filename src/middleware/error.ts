@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { Prisma } from "@prisma/client";
+import multer from "multer";
 import { ApiError } from "../utils/apiError";
 import { logger } from "../lib/logger";
 
@@ -23,6 +24,18 @@ export function errorHandler(
     res.status(err.statusCode).json({
       success: false,
       error: { code: err.code, message: err.message, details: err.details },
+    });
+    return;
+  }
+
+  if (err instanceof multer.MulterError) {
+    const apiError =
+      err.code === "LIMIT_FILE_SIZE"
+        ? ApiError.payloadTooLarge("File is too large")
+        : ApiError.badRequest(`Invalid upload: ${err.message}`);
+    res.status(apiError.statusCode).json({
+      success: false,
+      error: { code: apiError.code, message: apiError.message },
     });
     return;
   }
