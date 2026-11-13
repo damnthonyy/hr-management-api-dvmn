@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app";
 import { prisma } from "../src/lib/prisma";
-import { closeRedis } from "../src/lib/redis";
+import { closeRedis, getRedis } from "../src/lib/redis";
+import { env } from "../src/config/env";
 import { closeQueues } from "../src/queues";
 
 const app = createApp();
@@ -127,6 +128,86 @@ describe("HTTP hardening", () => {
       expect(res.status).toBe(409);
       expect(res.body.error.details).toBeUndefined();
       leaks(res.body);
+    });
+  });
+
+  describe("rate limiting", () => {
+    const clearCounters = async () => {
+      const redis = getRedis();
+      let cursor = "0";
+      do {
+        const [next, keys] = await redis.scan(cursor, "MATCH", "rl:*", "COUNT", 100);
+        if (keys.length > 0) await redis.del(...keys);
+        cursor = next;
+      } while (cursor !== "0");
+    };
+
+    beforeEach(async () => {
+      env.rateLimit.enabled = true;
+      await clearCounters();
+    });
+
+    afterEach(async () => {
+      vi.restoreAllMocks();
+      env.rateLimit.enabled = false;
+      await clearCounters();
+    });
+
+    it("limits password reset emails per account, with Retry-After", async () => {
+      const target = `victim-${unique}@test.example`;
+      for (let i = 0; i < 5; i += 1) {
+        const res = await request(app).post("/api/v1/auth/forgot-password").send({ email: target });
+        expect(res.status).toBe(200);
+      }
+      const blocked = await request(app).post("/api/v1/auth/forgot-password").send({ email: ` ${target.toUpperCase()} ` });
+      expect(blocked.status).toBe(429);
+      expect(Number(blocked.headers["retry-after"])).toBeGreaterThan(0);
+      // Other accounts are not affected.
+      const other = await request(app).post("/api/v1/auth/forgot-password").send({ email: `other-${unique}@test.example` });
+      expect(other.status).toBe(200);
+    });
+
+    it("cannot be bypassed by rotating X-Forwarded-For", async () => {
+      const statuses: number[] = [];
+      for (let i = 0; i < 11; i += 1) {
+        const res = await request(app)
+          .post("/api/v1/auth/register")
+          .set("X-Forwarded-For", `203.0.113.${i}`)
+          .send({});
+        statuses.push(res.status);
+      }
+      expect(statuses.slice(0, 10).every((status) => status === 400)).toBe(true);
+      expect(statuses[10]).toBe(429);
+    });
+
+    it("limits refresh and login per account", async () => {
+      for (let i = 0; i < 10; i += 1) {
+        await request(app).post("/api/v1/auth/login").send({ email: `nobody-${unique}@test.example`, password: "wrong" });
+      }
+      const login = await request(app)
+        .post("/api/v1/auth/login")
+        .send({ email: `nobody-${unique}@test.example`, password: "wrong" });
+      expect(login.status).toBe(429);
+
+      const refresh = await request(app).post("/api/v1/auth/refresh").send({ refreshToken: "x" });
+      expect(refresh.headers["x-ratelimit-limit"]).toBe("100");
+    });
+
+    it("always sets an expiry on counters, and repairs counters left without one", async () => {
+      const redis = getRedis();
+      const key = "rl:global:::ffff:127.0.0.1";
+      await redis.set(key, "1"); // what the old INCR-then-EXPIRE code could leave behind
+      expect(await redis.ttl(key)).toBe(-1);
+      await request(app).get("/health");
+      expect(await redis.ttl(key)).toBeGreaterThan(0);
+    });
+
+    it("fails open quickly when Redis does not answer", async () => {
+      vi.spyOn(getRedis(), "eval").mockReturnValue(new Promise(() => undefined) as never);
+      const started = Date.now();
+      const res = await request(app).post("/api/v1/auth/forgot-password").send({ email: `slow-${unique}@test.example` });
+      expect(res.status).toBe(200);
+      expect(Date.now() - started).toBeLessThan(5000);
     });
   });
 });

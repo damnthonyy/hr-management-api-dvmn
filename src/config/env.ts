@@ -86,6 +86,8 @@ export const env = {
   storageDir: process.env.STORAGE_DIR ?? "storage",
   maxUploadBytes: asInt("MAX_UPLOAD_BYTES", 15728640),
   rateLimit: {
+    // Only meant to be disabled in tests.
+    enabled: process.env.RATE_LIMIT_ENABLED !== "false",
     window: asInt("RATE_LIMIT_WINDOW", 60),
     max: asInt("RATE_LIMIT_MAX", 300),
   },
