@@ -120,6 +120,19 @@ describe("multi-tenant isolation", () => {
     });
     victim.payrollRecordId = record.id;
 
+    const cycle = await prisma.performanceCycle.create({
+      data: { organizationId: b.orgId, name: "Victim cycle", startDate: new Date(), endDate: new Date() },
+    });
+    victim.cycleId = cycle.id;
+    const review = await prisma.performanceReview.create({
+      data: { cycleId: cycle.id, employeeId: employee.id, authorId: b.userId, summary: "secret review", status: "DRAFT" },
+    });
+    victim.reviewId = review.id;
+    const objective = await prisma.objective.create({
+      data: { employeeId: employee.id, title: "Victim objective" },
+    });
+    victim.objectiveId = objective.id;
+
     ensureStorage();
     const fileName = `victim-${unique}.txt`;
     fs.writeFileSync(path.join(uploadsDir(), fileName), "confidential payslip");
@@ -336,6 +349,38 @@ describe("multi-tenant isolation", () => {
       expect(record?.bonuses).toHaveLength(0);
       expect(record?.deductions).toHaveLength(0);
       expect(record?.netSalary.toString()).toBe("10000");
+    });
+  });
+
+  describe("performance", () => {
+    it.each([
+      ["GET", () => `/api/v1/performance/reviews/${victim.reviewId}`, undefined],
+      ["PATCH", () => `/api/v1/performance/reviews/${victim.reviewId}`, () => ({ summary: "Hacked" })],
+      ["POST", () => "/api/v1/performance/reviews", () => ({ cycleId: victim.cycleId, employeeId: victim.employeeId })],
+      ["GET", () => `/api/v1/performance/objectives/${victim.employeeId}`, undefined],
+      ["POST", () => "/api/v1/performance/objectives", () => ({ employeeId: victim.employeeId, title: "Injected" })],
+      ["PATCH", () => `/api/v1/performance/objectives/${victim.objectiveId}`, () => ({ title: "Hacked" })],
+      ["DELETE", () => `/api/v1/performance/objectives/${victim.objectiveId}`, undefined],
+    ] as const)("%s %s returns 404", async (method, url, body) => {
+      const req = request(app)[method.toLowerCase() as "get" | "post" | "patch" | "delete"](url()).set(asA());
+      const payload = typeof body === "function" ? body() : body;
+      const res = await (payload ? req.send(payload) : req);
+      expect(res.status).toBe(404);
+      expect(res.text).not.toContain("secret review");
+    });
+
+    it("does not list another org's reviews when filtering by its employee", async () => {
+      const res = await request(app).get(`/api/v1/performance/reviews?employeeId=${victim.employeeId}`).set(asA());
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(0);
+    });
+
+    it("left the victim review and objective untouched", async () => {
+      const review = await prisma.performanceReview.findUnique({ where: { id: victim.reviewId } });
+      expect(review?.summary).toBe("secret review");
+      const objective = await prisma.objective.findUnique({ where: { id: victim.objectiveId } });
+      expect(objective?.title).toBe("Victim objective");
+      expect(await prisma.objective.count({ where: { employeeId: victim.employeeId } })).toBe(1);
     });
   });
 });

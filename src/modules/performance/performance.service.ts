@@ -1,6 +1,18 @@
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { recordAudit } from "../../services/audit.service";
+import { assertOrgRefs } from "../../utils/tenant";
+
+/** Reviews and objectives have no organizationId column: scope through the employee. */
+async function assertReviewInOrg(organizationId: string, id: string): Promise<void> {
+  const count = await prisma.performanceReview.count({ where: { id, employee: { organizationId } } });
+  if (count === 0) throw ApiError.notFound("Review not found");
+}
+
+async function assertObjectiveInOrg(organizationId: string, id: string): Promise<void> {
+  const count = await prisma.objective.count({ where: { id, employee: { organizationId } } });
+  if (count === 0) throw ApiError.notFound("Objective not found");
+}
 
 export async function listCycles(organizationId: string) {
   return prisma.performanceCycle.findMany({
@@ -40,13 +52,14 @@ export async function listReviews(organizationId: string, query: Record<string, 
   });
 }
 
-export async function createReview(data: {
+export async function createReview(organizationId: string, data: {
   cycleId: string;
   employeeId: string;
   score?: number;
   summary?: string;
   feedback?: string;
-}, authorId: string, organizationId: string) {
+}, authorId: string) {
+  await assertOrgRefs(organizationId, { performanceCycle: data.cycleId, employee: data.employeeId });
   const review = await prisma.performanceReview.create({
     data: {
       cycleId: data.cycleId,
@@ -68,34 +81,35 @@ export async function createReview(data: {
   return review;
 }
 
-export async function updateReview(id: string, data: Record<string, unknown>) {
-  const existing = await prisma.performanceReview.findUnique({ where: { id } });
-  if (!existing) throw ApiError.notFound("Review not found");
+export async function updateReview(organizationId: string, id: string, data: Record<string, unknown>) {
+  await assertReviewInOrg(organizationId, id);
   const payload: Record<string, unknown> = { ...data };
   if (data.status === "SUBMITTED") payload.submittedAt = new Date();
   return prisma.performanceReview.update({ where: { id }, data: payload });
 }
 
-export async function getReview(id: string) {
+export async function getReview(organizationId: string, id: string) {
   const review = await prisma.performanceReview.findUnique({
-    where: { id },
+    where: { id, employee: { organizationId } },
     include: { employee: true, cycle: true, author: { select: { id: true, firstName: true, lastName: true } } },
   });
   if (!review) throw ApiError.notFound("Review not found");
   return review;
 }
 
-export async function listObjectives(employeeId: string) {
+export async function listObjectives(organizationId: string, employeeId: string) {
+  await assertOrgRefs(organizationId, { employee: employeeId });
   return prisma.objective.findMany({ where: { employeeId }, orderBy: { createdAt: "desc" } });
 }
 
-export async function createObjective(data: {
+export async function createObjective(organizationId: string, data: {
   employeeId: string;
   title: string;
   description?: string;
   weight?: number;
   dueDate?: string;
 }) {
+  await assertOrgRefs(organizationId, { employee: data.employeeId });
   return prisma.objective.create({
     data: {
       employeeId: data.employeeId,
@@ -107,11 +121,13 @@ export async function createObjective(data: {
   });
 }
 
-export async function updateObjective(id: string, data: Record<string, unknown>) {
+export async function updateObjective(organizationId: string, id: string, data: Record<string, unknown>) {
+  await assertObjectiveInOrg(organizationId, id);
   return prisma.objective.update({ where: { id }, data });
 }
 
-export async function deleteObjective(id: string) {
+export async function deleteObjective(organizationId: string, id: string) {
+  await assertObjectiveInOrg(organizationId, id);
   await prisma.objective.delete({ where: { id } });
   return { ok: true };
 }
