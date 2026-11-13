@@ -44,6 +44,7 @@ export async function changePassword(req: Request, res: Response): Promise<void>
   if (!req.auth) throw ApiError.unauthorized();
   const result = await authService.changePassword(
     req.auth.userId,
+    req.auth.sessionId,
     req.body.currentPassword,
     req.body.newPassword
   );

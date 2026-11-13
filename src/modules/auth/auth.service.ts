@@ -309,14 +309,28 @@ export async function resetPassword(token: string, newPassword: string) {
     throw ApiError.badRequest("Reset token expired");
   }
   const passwordHash = await hashPassword(newPassword);
-  await prisma.user.update({
-    where: { id: record.userId },
-    data: { passwordHash },
+  const applied = await prisma.$transaction(async (tx) => {
+    // Claim the token atomically so it cannot be used twice concurrently.
+    const claimed = await tx.passwordResetToken.updateMany({
+      where: { id: record.id, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+    if (claimed.count === 0) return false;
+    // Any other pending reset link for this account becomes useless too.
+    await tx.passwordResetToken.updateMany({
+      where: { userId: record.userId, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+    // A reset also unlocks the account.
+    await tx.user.update({
+      where: { id: record.userId },
+      data: { passwordHash, failedLoginCount: 0, lockedUntil: null },
+    });
+    return true;
   });
-  await prisma.passwordResetToken.update({
-    where: { id: record.id },
-    data: { usedAt: new Date() },
-  });
+  if (!applied) throw ApiError.badRequest("Invalid or already used reset token");
+  // Whoever had access before the reset (possibly an attacker) is logged out.
+  await revokeSessions({ userId: record.userId });
   await recordAudit({
     userId: record.userId,
     action: "user.password_reset",
@@ -326,13 +340,20 @@ export async function resetPassword(token: string, newPassword: string) {
   return { ok: true };
 }
 
-export async function changePassword(userId: string, currentPassword: string, newPassword: string) {
+export async function changePassword(
+  userId: string,
+  currentSessionId: string,
+  currentPassword: string,
+  newPassword: string
+) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw ApiError.notFound("User not found");
   const valid = await verifyPassword(user.passwordHash, currentPassword);
   if (!valid) throw ApiError.badRequest("Current password is incorrect");
   const passwordHash = await hashPassword(newPassword);
   await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+  // Keep the current session, log out every other device.
+  await revokeSessions({ userId, id: { not: currentSessionId } });
   await recordAudit({
     organizationId: user.organizationId,
     userId,

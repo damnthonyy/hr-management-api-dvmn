@@ -180,4 +180,34 @@ describe("auth security", () => {
       expect((await request(app).get("/api/v1/auth/me").set(bearer(victim.accessToken))).status).toBe(200);
     });
   });
+
+  describe("password changes revoke sessions", () => {
+    it("a password reset logs out every session", async () => {
+      const account = await register("reset-sessions");
+      const other = await login(account.email);
+      const raw = randomToken(24);
+      await prisma.passwordResetToken.create({
+        data: { userId: account.userId, tokenHash: sha256(raw), expiresAt: new Date(Date.now() + 60_000) },
+      });
+      const res = await request(app).post("/api/v1/auth/reset-password").send({ token: raw, password: "Reset123456!" });
+      expect(res.status).toBe(200);
+      for (const token of [account.accessToken, other.body.data.tokens.accessToken]) {
+        expect((await request(app).get("/api/v1/auth/me").set(bearer(token))).status).toBe(401);
+      }
+      expect((await request(app).post("/api/v1/auth/refresh").send({ refreshToken: account.refreshToken })).status).toBe(401);
+      expect((await login(account.email, "Reset123456!")).status).toBe(200);
+    });
+
+    it("a password change keeps the current session and logs out the others", async () => {
+      const account = await register("change-sessions");
+      const other = await login(account.email);
+      const res = await request(app)
+        .post("/api/v1/auth/change-password")
+        .set(bearer(account.accessToken))
+        .send({ currentPassword: password, newPassword: "Changed123456!" });
+      expect(res.status).toBe(200);
+      expect((await request(app).get("/api/v1/auth/me").set(bearer(account.accessToken))).status).toBe(200);
+      expect((await request(app).get("/api/v1/auth/me").set(bearer(other.body.data.tokens.accessToken))).status).toBe(401);
+    });
+  });
 });
