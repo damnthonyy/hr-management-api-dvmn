@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { accountEmail } from "../../utils/schemas";
 
 export const createOrganizationSchema = z.object({
   name: z.string().min(2).max(120),
@@ -32,7 +33,7 @@ export const updateSubscriptionSchema = z.object({
 });
 
 export const addAdminSchema = z.object({
-  email: z.email(),
+  email: accountEmail(),
   password: z.string().min(8).max(128),
   firstName: z.string().min(1).max(80),
   lastName: z.string().min(1).max(80),

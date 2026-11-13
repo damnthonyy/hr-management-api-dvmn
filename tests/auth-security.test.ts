@@ -210,4 +210,57 @@ describe("auth security", () => {
       expect((await request(app).get("/api/v1/auth/me").set(bearer(other.body.data.tokens.accessToken))).status).toBe(401);
     });
   });
+
+  describe("login hardening", () => {
+    it("treats emails case-insensitively and keeps them globally unique", async () => {
+      const email = `Mixed.Case-${unique}@Test.Example`;
+      const res = await request(app).post("/api/v1/auth/register").send({
+        organizationName: `Case ${unique}`,
+        email: `  ${email} `,
+        password,
+        firstName: "Case",
+        lastName: "Test",
+      });
+      expect(res.status).toBe(201);
+      orgIds.push(res.body.data.organization.id);
+      expect(res.body.data.user.email).toBe(email.toLowerCase());
+      expect((await login(email.toUpperCase())).status).toBe(200);
+
+      const duplicate = await request(app).post("/api/v1/auth/register").send({
+        organizationName: `Case dup ${unique}`,
+        email: email.toLowerCase(),
+        password,
+        firstName: "Case",
+        lastName: "Dup",
+      });
+      expect(duplicate.status).toBe(409);
+    });
+
+    it("gives the same answer for an unknown email and a wrong password", async () => {
+      const account = await register("enum");
+      const unknown = await login(`ghost-${unique}@test.example`);
+      const wrong = await login(account.email, "WrongPassword1!");
+      expect(unknown.status).toBe(401);
+      expect(wrong.status).toBe(401);
+      expect(unknown.body).toEqual(wrong.body);
+    });
+
+    it("locks the account after 5 failures, even for the right password", async () => {
+      const account = await register("lockout");
+      for (let i = 0; i < 5; i += 1) {
+        expect((await login(account.email, `Wrong-${i}-Password`)).status).toBe(401);
+      }
+      const locked = await login(account.email);
+      expect(locked.status).toBe(401);
+      const user = await prisma.user.findUniqueOrThrow({ where: { id: account.userId } });
+      expect(user.lockedUntil?.getTime()).toBeGreaterThan(Date.now());
+
+      // Once the lock expires, the right password works again and resets the state.
+      await prisma.user.update({ where: { id: account.userId }, data: { lockedUntil: new Date(Date.now() - 1000) } });
+      expect((await login(account.email)).status).toBe(200);
+      const after = await prisma.user.findUniqueOrThrow({ where: { id: account.userId } });
+      expect(after.failedLoginCount).toBe(0);
+      expect(after.lockedUntil).toBeNull();
+    });
+  });
 });

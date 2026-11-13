@@ -92,7 +92,7 @@ export async function register(input: {
   firstName: string;
   lastName: string;
 }, meta: RequestMeta) {
-  const existing = await prisma.user.findFirst({ where: { email: input.email } });
+  const existing = await prisma.user.findUnique({ where: { email: input.email } });
   if (existing) {
     throw ApiError.conflict("An account with this email already exists");
   }
@@ -156,39 +156,85 @@ export async function register(input: {
   return { organization: result.organization, user: sanitizeUser(result.user), tokens };
 }
 
+/** Consecutive failures before the account is locked. */
+const MAX_FAILED_LOGINS = 5;
+const LOCKOUT_MS = 15 * 60 * 1000;
+
+let dummyHash: Promise<string> | null = null;
+/**
+ * Verifying against a throwaway hash for unknown emails makes the response
+ * time the same as for existing accounts (no user enumeration by timing).
+ */
+function burnPasswordCheck(plain: string): Promise<boolean> {
+  dummyHash ??= hashPassword(randomToken(16));
+  return dummyHash.then((hash) => verifyPassword(hash, plain));
+}
+
 export async function login(input: { email: string; password: string }, meta: RequestMeta) {
-  const user = await prisma.user.findFirst({ where: { email: input.email } });
+  const invalid = () => ApiError.unauthorized("Invalid email or password");
+  const user = await prisma.user.findUnique({ where: { email: input.email } });
   if (!user) {
-    throw ApiError.unauthorized("Invalid email or password");
+    await burnPasswordCheck(input.password);
+    throw invalid();
+  }
+
+  const history = (success: boolean, reason: string | null) =>
+    prisma.loginHistory.create({
+      data: {
+        userId: user.id,
+        success,
+        ipAddress: meta.ipAddress ?? null,
+        userAgent: meta.userAgent ?? null,
+        reason,
+      },
+    });
+
+  // While locked, the password is not even checked (but the time spent
+  // is the same), and the answer is the generic one.
+  if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
+    await burnPasswordCheck(input.password);
+    await history(false, "locked");
+    throw invalid();
   }
 
   const valid = await verifyPassword(user.passwordHash, input.password);
-
-  await prisma.loginHistory.create({
-    data: {
-      userId: user.id,
-      success: valid,
-      ipAddress: meta.ipAddress ?? null,
-      userAgent: meta.userAgent ?? null,
-      reason: valid ? null : "invalid_credentials",
-    },
-  });
-
   if (!valid) {
-    await prisma.user.update({
+    // Atomic increment: parallel guesses cannot dodge the counter.
+    const { failedLoginCount } = await prisma.user.update({
       where: { id: user.id },
       data: { failedLoginCount: { increment: 1 } },
+      select: { failedLoginCount: true },
     });
-    throw ApiError.unauthorized("Invalid email or password");
+    const lock = failedLoginCount >= MAX_FAILED_LOGINS;
+    if (lock) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginCount: 0, lockedUntil: new Date(Date.now() + LOCKOUT_MS) },
+      });
+    }
+    await history(false, lock ? "invalid_credentials_locked" : "invalid_credentials");
+    if (lock) {
+      await recordAudit({
+        organizationId: user.organizationId,
+        userId: user.id,
+        action: "user.locked",
+        entityType: "User",
+        entityId: user.id,
+        ipAddress: meta.ipAddress,
+      });
+    }
+    throw invalid();
   }
 
   if (!user.isActive) {
+    await history(false, "inactive");
     throw ApiError.forbidden("This account has been deactivated");
   }
 
+  await history(true, null);
   await prisma.user.update({
     where: { id: user.id },
-    data: { lastLoginAt: new Date(), failedLoginCount: 0 },
+    data: { lastLoginAt: new Date(), failedLoginCount: 0, lockedUntil: null },
   });
 
   await recordAudit({
@@ -276,7 +322,7 @@ export async function logout(userId: string, sessionId: string): Promise<void> {
 }
 
 export async function forgotPassword(email: string): Promise<void> {
-  const user = await prisma.user.findFirst({ where: { email } });
+  const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
     return;
   }
