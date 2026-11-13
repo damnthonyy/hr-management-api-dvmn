@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as controller from "./organization.controller";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { validate } from "../../middleware/validate";
+import { validate, validateIdParams } from "../../middleware/validate";
 import { authenticate } from "../../middleware/authenticate";
 import { requireRole, requirePermission } from "../../middleware/authorize";
 import { SystemRole } from "@prisma/client";
@@ -15,7 +15,7 @@ import {
   addAdminSchema,
 } from "./organization.validation";
 
-const router = Router();
+const router = validateIdParams(Router());
 
 router.use(authenticate);
 

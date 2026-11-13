@@ -1,5 +1,5 @@
-import { NextFunction, Request, Response } from "express";
-import { ZodError, type ZodType } from "zod";
+import { NextFunction, Request, Response, Router } from "express";
+import { z, ZodError, type ZodType } from "zod";
 import { ApiError } from "../utils/apiError";
 
 type Source = "body" | "query" | "params";
@@ -32,4 +32,33 @@ export function validate(schema: ZodType, source: Source = "body") {
       next(error);
     }
   };
+}
+
+/** Every id in this API is a UUID (Prisma `@default(uuid())`). */
+const ID_PARAMS = [
+  "id",
+  "assignmentId",
+  "departmentId",
+  "employeeId",
+  "periodId",
+  "recordId",
+  "sessionId",
+  "teamId",
+  "userId",
+] as const;
+
+const uuid = z.uuid();
+
+/**
+ * Rejects malformed ids in route parameters with a 400 before they reach the
+ * services and the database (they used to be passed straight to Prisma).
+ * Called on each module router: router.param handlers are per router.
+ */
+export function validateIdParams(router: Router): Router {
+  for (const name of ID_PARAMS) {
+    router.param(name, (_req, _res, next, value: string) => {
+      next(uuid.safeParse(value).success ? undefined : ApiError.badRequest(`Invalid ${name}: expected a UUID`));
+    });
+  }
+  return router;
 }

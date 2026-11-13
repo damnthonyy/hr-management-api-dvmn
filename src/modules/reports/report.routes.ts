@@ -1,3 +1,4 @@
+import { validateIdParams } from "../../middleware/validate";
 import { Router, Request, Response } from "express";
 import * as service from "./report.service";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -11,7 +12,7 @@ import { requireOrgId } from "../../utils/tenant";
 
 const orgId = requireOrgId;
 
-const router = Router();
+const router = validateIdParams(Router());
 
 router.use(authenticate);
 router.use(requirePermission(PERMISSIONS.REPORT_VIEW));

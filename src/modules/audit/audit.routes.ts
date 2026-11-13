@@ -1,3 +1,4 @@
+import { validateIdParams } from "../../middleware/validate";
 import { Router } from "express";
 import { Request, Response } from "express";
 import { prisma } from "../../lib/prisma";
@@ -9,7 +10,7 @@ import { parsePagination, buildMeta } from "../../utils/pagination";
 import { sendPaginated } from "../../utils/response";
 import { ApiError } from "../../utils/apiError";
 
-const router = Router();
+const router = validateIdParams(Router());
 
 router.use(authenticate);
 

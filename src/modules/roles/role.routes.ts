@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as controller from "./role.controller";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { validate } from "../../middleware/validate";
+import { validate, validateIdParams } from "../../middleware/validate";
 import { authenticate } from "../../middleware/authenticate";
 import { requirePermission } from "../../middleware/authorize";
 import { PERMISSIONS } from "../../config/permissions";
@@ -12,7 +12,7 @@ import {
   setSystemRoleSchema,
 } from "./role.validation";
 
-const router = Router();
+const router = validateIdParams(Router());
 
 router.use(authenticate);
 

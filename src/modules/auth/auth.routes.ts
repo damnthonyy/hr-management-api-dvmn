@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as controller from "./auth.controller";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { validate } from "../../middleware/validate";
+import { validate, validateIdParams } from "../../middleware/validate";
 import { authenticate } from "../../middleware/authenticate";
 import {
   authRateLimit,
@@ -22,7 +22,7 @@ import {
   updateProfileSchema,
 } from "./auth.validation";
 
-const router = Router();
+const router = validateIdParams(Router());
 
 router.post("/register", authRateLimit, registerRateLimit, validate(registerSchema), asyncHandler(controller.register));
 router.post("/login", authRateLimit, loginAccountRateLimit, validate(loginSchema), asyncHandler(controller.login));

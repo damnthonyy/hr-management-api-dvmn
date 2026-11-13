@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as controller from "./employee.controller";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { validate } from "../../middleware/validate";
+import { validate, validateIdParams } from "../../middleware/validate";
 import { authenticate } from "../../middleware/authenticate";
 import { requirePermission, requireAnyPermission } from "../../middleware/authorize";
 import { PERMISSIONS } from "../../config/permissions";
@@ -13,7 +13,7 @@ import {
   salaryUpdateSchema,
 } from "./employee.validation";
 
-const router = Router();
+const router = validateIdParams(Router());
 
 router.use(authenticate);
 

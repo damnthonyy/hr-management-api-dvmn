@@ -48,7 +48,12 @@ describe("graceful shutdown", () => {
 
   it("lets in-flight requests finish before the server closes", async () => {
     const app = express();
-    app.get("/slow", (_req, res) => void setTimeout(() => res.send("done"), 200));
+    let started!: () => void;
+    const requestStarted = new Promise<void>((resolve) => (started = resolve));
+    app.get("/slow", (_req, res) => {
+      started();
+      setTimeout(() => res.send("done"), 200);
+    });
     const server = app.listen(0);
     await new Promise((resolve) => server.once("listening", resolve));
     const { port } = server.address() as { port: number };
@@ -60,7 +65,7 @@ describe("graceful shutdown", () => {
         res.on("end", () => resolve(body));
       }).on("error", reject);
     });
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await requestStarted;
 
     let closed = false;
     const closing = closeServer(server).then(() => (closed = true));

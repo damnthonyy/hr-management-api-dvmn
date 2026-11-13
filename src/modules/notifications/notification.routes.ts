@@ -4,7 +4,7 @@ import { SystemRole } from "@prisma/client";
 import { accountEmail } from "../../utils/schemas";
 import * as controller from "./notification.controller";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { validate } from "../../middleware/validate";
+import { validate, validateIdParams } from "../../middleware/validate";
 import { authenticate } from "../../middleware/authenticate";
 import { requirePermission } from "../../middleware/authorize";
 import { PERMISSIONS } from "../../config/permissions";
@@ -14,7 +14,7 @@ const inviteSchema = z.object({
   role: z.enum(SystemRole),
 });
 
-const router = Router();
+const router = validateIdParams(Router());
 
 router.use(authenticate);
 
