@@ -7,11 +7,9 @@ import { PERMISSIONS } from "../../config/permissions";
 import { sendSuccess } from "../../utils/response";
 import { ApiError } from "../../utils/apiError";
 import { enqueueReport } from "../../queues";
+import { requireOrgId } from "../../utils/tenant";
 
-function orgId(req: Request): string {
-  if (!req.auth) throw ApiError.unauthorized();
-  return req.auth.organizationId;
-}
+const orgId = requireOrgId;
 
 const router = Router();
 
