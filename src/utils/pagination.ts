@@ -7,10 +7,24 @@ export interface PageParams {
   take: number;
 }
 
+export const DEFAULT_PAGE_SIZE = 25;
+export const MAX_PAGE_SIZE = 100;
+/** Deep offsets are expensive for the database; nobody pages this far by hand. */
+export const MAX_PAGE = 10_000;
+
+function clampInt(raw: unknown, fallback: number, min: number, max: number): number {
+  const parsed = Number.parseInt(String(raw ?? ""), 10);
+  if (Number.isNaN(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+/**
+ * pageSize was unbounded (pageSize=1000000 loaded whole tables, negative
+ * values reached Prisma): it is now clamped to 1..MAX_PAGE_SIZE.
+ */
 export function parsePagination(query: Record<string, unknown>): PageParams {
-  const page = Math.max(1, Number.parseInt(String(query.page ?? "1"), 10) || 1);
-  const rawSize = Number.parseInt(String(query.pageSize ?? "25"), 10);
-  const pageSize = Number.isNaN(rawSize) ? 25 : rawSize;
+  const page = clampInt(query.page, 1, 1, MAX_PAGE);
+  const pageSize = clampInt(query.pageSize, DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE);
   return {
     page,
     pageSize,

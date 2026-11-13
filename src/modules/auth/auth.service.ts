@@ -489,9 +489,11 @@ export async function updateProfile(
 }
 
 export async function listSessions(userId: string) {
+  // Active sessions only: every login creates one, the full history grows forever.
   return prisma.session.findMany({
-    where: { userId },
+    where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
     orderBy: { lastSeenAt: "desc" },
+    take: 100,
   });
 }
 

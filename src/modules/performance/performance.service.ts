@@ -2,6 +2,7 @@ import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/apiError";
 import { recordAudit } from "../../services/audit.service";
 import { assertOrgRefs } from "../../utils/tenant";
+import { buildMeta, parsePagination } from "../../utils/pagination";
 
 /** Reviews and objectives have no organizationId column: scope through the employee. */
 async function assertReviewInOrg(organizationId: string, id: string): Promise<void> {
@@ -41,15 +42,22 @@ export async function listReviews(organizationId: string, query: Record<string, 
   const where: Record<string, unknown> = { employee: { organizationId } };
   if (typeof query.cycleId === "string") where.cycleId = query.cycleId;
   if (typeof query.employeeId === "string") where.employeeId = query.employeeId;
-  return prisma.performanceReview.findMany({
-    where,
-    include: {
-      employee: { select: { id: true, firstName: true, lastName: true, jobTitle: true } },
-      cycle: { select: { id: true, name: true } },
-      author: { select: { id: true, firstName: true, lastName: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const params = parsePagination(query);
+  const [items, total] = await Promise.all([
+    prisma.performanceReview.findMany({
+      where,
+      include: {
+        employee: { select: { id: true, firstName: true, lastName: true, jobTitle: true } },
+        cycle: { select: { id: true, name: true } },
+        author: { select: { id: true, firstName: true, lastName: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      skip: params.skip,
+      take: params.take,
+    }),
+    prisma.performanceReview.count({ where }),
+  ]);
+  return { items, meta: buildMeta(params, total) };
 }
 
 export async function createReview(organizationId: string, data: {

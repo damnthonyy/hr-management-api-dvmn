@@ -225,4 +225,51 @@ describe("HTTP hardening", () => {
       }
     );
   });
+
+  describe("pagination", () => {
+    const list = (query: string) =>
+      request(app).get(`/api/v1/departments?${query}`).set("Authorization", `Bearer ${token}`);
+
+    it.each([
+      ["pageSize=1000000", 100],
+      ["pageSize=-5", 1],
+      ["pageSize=0", 1],
+      ["pageSize=abc", 25],
+      ["", 25],
+    ])("clamps %s to %i", async (query, expected) => {
+      const res = await list(query);
+      expect(res.status).toBe(200);
+      expect(res.body.meta.pageSize).toBe(expected);
+    });
+
+    it("clamps negative and huge pages", async () => {
+      expect((await list("page=-3")).body.meta.page).toBe(1);
+      expect((await list("page=99999999")).body.meta.page).toBe(10000);
+    });
+
+    it("paginates the document list", async () => {
+      const res = await request(app)
+        .get("/api/v1/documents?pageSize=5")
+        .set("Authorization", `Bearer ${token}`);
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(res.body.meta).toMatchObject({ page: 1, pageSize: 5 });
+    });
+
+    it("paginates the performance review list", async () => {
+      const res = await request(app)
+        .get("/api/v1/performance/reviews?pageSize=500")
+        .set("Authorization", `Bearer ${token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.meta.pageSize).toBe(100);
+    });
+
+    it("lists only active sessions", async () => {
+      const other = await request(app).post("/api/v1/auth/login").send({ email, password });
+      await request(app).post("/api/v1/auth/logout").set("Authorization", `Bearer ${other.body.data.tokens.accessToken}`).send({});
+      const res = await request(app).get("/api/v1/auth/sessions").set("Authorization", `Bearer ${token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data.every((session: { revokedAt: string | null }) => session.revokedAt === null)).toBe(true);
+    });
+  });
 });

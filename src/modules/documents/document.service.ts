@@ -12,6 +12,7 @@ import { assertOrgRefs } from "../../utils/tenant";
 import { contentMatchesType, extensionFor, isAllowedMimeType, SIGNATURE_BYTES } from "../../lib/fileType";
 import { fetchRemoteFile, RemoteFileTooLargeError, UnsafeUrlError } from "../../lib/safeFetch";
 import { env } from "../../config/env";
+import { buildMeta, parsePagination } from "../../utils/pagination";
 
 interface UploadedFile {
   filename: string;
@@ -25,11 +26,18 @@ export async function listDocuments(organizationId: string, query: Record<string
   const where: Record<string, unknown> = { organizationId };
   if (typeof query.employeeId === "string") where.employeeId = query.employeeId;
   if (typeof query.categoryId === "string") where.categoryId = query.categoryId;
-  return prisma.document.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    include: { category: true, employee: { select: { id: true, firstName: true, lastName: true } } },
-  });
+  const params = parsePagination(query);
+  const [items, total] = await Promise.all([
+    prisma.document.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: params.skip,
+      take: params.take,
+      include: { category: true, employee: { select: { id: true, firstName: true, lastName: true } } },
+    }),
+    prisma.document.count({ where }),
+  ]);
+  return { items, meta: buildMeta(params, total) };
 }
 
 export async function getDocument(organizationId: string, id: string) {

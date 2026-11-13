@@ -1,11 +1,12 @@
 import { Request, Response } from "express";
 import * as service from "./document.service";
-import { sendSuccess, sendCreated, sendNoContent } from "../../utils/response";
+import { sendSuccess, sendCreated, sendNoContent, sendPaginated } from "../../utils/response";
 import { ApiError } from "../../utils/apiError";
 import { requireAuthContext, requireOrgId } from "../../utils/tenant";
 
 export async function list(req: Request, res: Response): Promise<void> {
-  sendSuccess(res, await service.listDocuments(requireOrgId(req), req.query as Record<string, unknown>));
+  const { items, meta } = await service.listDocuments(requireOrgId(req), req.query as Record<string, unknown>);
+  sendPaginated(res, items, meta);
 }
 
 export async function getOne(req: Request, res: Response): Promise<void> {
